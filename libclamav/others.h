@@ -166,8 +166,8 @@ typedef struct recursion_level_tag {
     uint32_t recursion_level_buffer;      /* Which buffer layer in scan recursion. */
     uint32_t recursion_level_buffer_fmap; /* Which fmap layer in this buffer. */
     bool is_normalized_layer;             /* Indicates that the layer should be skipped when checking container and intermediate types. */
+    bool was_decrypted;                   /* Indicates that this layer or a parent layer was encrypted and had been decrypted to get here. */
 } recursion_level_t;
-// #define CONTAINER_FLAG_VALID 0x01
 
 /* internal clamav context */
 typedef struct cli_ctx_tag {
@@ -190,6 +190,7 @@ typedef struct cli_ctx_tag {
     uint32_t recursion_level;           /* Index into recursion_stack; current fmap recursion level from start of scan. */
     fmap_t *fmap;                       /* Pointer to current fmap in recursion_stack, varies with recursion depth. For convenience. */
     bool next_layer_is_normalized;      /* Indicate that the next fmap pushed to the stack is normalized and should be ignored when checking container/intermediate types */
+    bool next_layer_was_decrypted;      /* Indicate that the next fmap pushed to the stack is was decrypted data. */
     unsigned char handlertype_hash[16];
     struct cli_dconf *dconf;
     bitset_t *hook_lsig_matches;
@@ -385,6 +386,7 @@ struct cl_engine {
     crtmgr cmgr;
 
     /* Callback(s) */
+    clcb_file_inspection cb_file_inspection;
     clcb_pre_cache cb_pre_cache;
     clcb_pre_scan cb_pre_scan;
     clcb_post_scan cb_post_scan;

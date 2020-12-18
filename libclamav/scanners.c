@@ -3890,24 +3890,134 @@ void emax_reached(cli_ctx *ctx)
 #define LINESTR2(x) LINESTR(x)
 #define __AT__ " at line " LINESTR2(__LINE__)
 
+/**
+ * @brief Provide the following to the calling application for each embedded file:
+ *  - name of parent file
+ *  - size of parent file
+ *  - name of current file
+ *  - size of current file
+ *  - pointer to the current file data
+ *
+ * @param cb
+ * @param ctx
+ * @param filetype
+ * @param old_hook_lsig_matches
+ * @param parent_property
+ * @param run_cleanup
+ * @return cl_error_t
+ */
+static cl_error_t dispatch_file_inspection_callback(clcb_file_inspection cb, cli_ctx *ctx, const char *filetype)
+{
+    cl_error_t status = CL_CLEAN;
+
+    int fd            = -1;
+    size_t fmap_index = ctx->recursion_level; /* index of current file */
+
+    cl_fmap_t *fmap         = NULL;
+    const char *file_name   = NULL;
+    size_t file_size        = 0;
+    const char *file_buffer = NULL;
+
+    char *intermediates = NULL;
+
+    size_t parent_file_size = 0;
+
+    if (NULL == cb) {
+        // Callback is not set.
+        goto done;
+    }
+
+    fmap = ctx->recursion_stack[fmap_index].fmap;
+    fd   = fmap_fd(fmap);
+
+    file_name   = fmap->name;
+    file_buffer = fmap_need_off_once_len(fmap, fmap->nested_offset, fmap->len, &file_size);
+
+    while (fmap_index > 0) {
+        cl_fmap_t *previous_fmap;
+        char *temp;
+        const char *intermediate = NULL;
+
+        fmap_index -= 1;
+        previous_fmap = ctx->recursion_stack[fmap_index].fmap;
+
+        if (ctx->recursion_level > 0 && (fmap_index == ctx->recursion_level - 1)) {
+            parent_file_size = previous_fmap->len;
+        }
+
+        if (NULL == previous_fmap->name) {
+            intermediate = "(no name)";
+        } else {
+            intermediate = previous_fmap->name;
+        }
+
+        if (NULL != intermediates) {
+            size_t temp_len = strlen(intermediates) + strlen(" > ") + strlen(intermediate) + 1;
+            temp            = cli_malloc(temp_len);
+            if (NULL == temp) {
+                status = CL_EMEM;
+                goto done;
+            }
+            snprintf(temp, temp_len, "%s > %s", intermediate, intermediates);
+            free(intermediates);
+        } else {
+            temp = cli_strdup_to_utf8(intermediate);
+            if (NULL == temp) {
+                status = CL_EMEM;
+                goto done;
+            }
+        }
+        intermediates = temp;
+        temp          = NULL;
+    }
+
+    perf_start(ctx, PERFT_INSPECT);
+    status = cb(fd, filetype, intermediates, parent_file_size, file_name, file_size, file_buffer,
+                ctx->recursion_level, ctx->recursion_stack[ctx->recursion_level].was_decrypted, ctx->cb_ctx);
+    perf_stop(ctx, PERFT_INSPECT);
+
+    switch (status) {
+        case CL_BREAK:
+            cli_dbgmsg("dispatch_file_inspection_callback: scan cancelled by callback\n");
+            status = CL_BREAK;
+            break;
+        case CL_VIRUS:
+            cli_dbgmsg("dispatch_file_inspection_callback: file blocked by callback\n");
+            cli_append_virus(ctx, "Detected.By.Callback.Inspection");
+            status = CL_VIRUS;
+            break;
+        case CL_CLEAN:
+            break;
+        default:
+            status = CL_CLEAN;
+            cli_warnmsg("dispatch_file_inspection_callback: ignoring bad return code from callback\n");
+    }
+
+done:
+
+    if (NULL != intermediates) {
+        free(intermediates);
+    }
+    return status;
+}
+
 static cl_error_t dispatch_prescan_callback(clcb_pre_scan cb, cli_ctx *ctx, const char *filetype)
 {
     cl_error_t status = CL_CLEAN;
 
     if (cb) {
         perf_start(ctx, PERFT_PRECB);
-
         status = cb(fmap_fd(ctx->fmap), filetype, ctx->cb_ctx);
+        perf_stop(ctx, PERFT_PRECB);
+
         switch (status) {
             case CL_BREAK:
-                cli_dbgmsg("dispatch_prescan_callback: file whitelisted by callback\n");
-                perf_stop(ctx, PERFT_PRECB);
+                cli_dbgmsg("dispatch_prescan_callback: file allowed by callback\n");
                 status = CL_BREAK;
                 break;
             case CL_VIRUS:
                 cli_dbgmsg("dispatch_prescan_callback: file blacklisted by callback\n");
                 cli_append_virus(ctx, "Detected.By.Callback");
-                perf_stop(ctx, PERFT_PRECB);
                 status = CL_VIRUS;
                 break;
             case CL_CLEAN:
@@ -3916,8 +4026,6 @@ static cl_error_t dispatch_prescan_callback(clcb_pre_scan cb, cli_ctx *ctx, cons
                 status = CL_CLEAN;
                 cli_warnmsg("dispatch_prescan_callback: ignoring bad return code from callback\n");
         }
-
-        perf_stop(ctx, PERFT_PRECB);
     }
 
     return status;
@@ -4126,6 +4234,16 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
         goto done;
     }
     hashed_size = ctx->fmap->len;
+
+    ret = dispatch_file_inspection_callback(ctx->engine->cb_file_inspection, ctx, filetype);
+    if (CL_CLEAN != ret) {
+        if (ret == CL_VIRUS) {
+            ret = cli_check_fp(ctx, NULL);
+        } else {
+            ret = CL_CLEAN;
+        }
+        goto done;
+    }
 
     /*
      * Check if we've already scanned this file before.
@@ -5373,6 +5491,11 @@ cl_error_t cl_scanmap_callback(cl_fmap_t *map, const char *filename, const char 
             return CL_VIRUS;
         }
         return CL_CLEAN;
+    }
+
+    if (NULL != filename && map->name == NULL) {
+        // Use the provided name for the fmap name if one wasn't already set.
+        cli_basename(filename, strlen(filename), &map->name);
     }
 
     return scan_common(map, filename, virname, scanned, engine, scanoptions, context);

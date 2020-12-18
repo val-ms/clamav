@@ -1430,6 +1430,15 @@ cl_error_t cli_recursion_stack_push(cli_ctx *ctx, cl_fmap_t *map, cli_file_t typ
         ctx->next_layer_is_normalized      = false;
     }
 
+    if (ctx->next_layer_was_decrypted) {
+        // Keep track of whether or not the current data was encrypted and has been decrypted before scanning it.
+        new_container->was_decrypted  = true;
+        ctx->next_layer_was_decrypted = false;
+    } else if (current_container->was_decrypted) {
+        // Propagate the "was decrypted" status to all child fmaps.
+        new_container->was_decrypted = true;
+    }
+
     ctx->fmap = new_container->fmap;
 
 done:
@@ -1776,6 +1785,11 @@ int cli_bitset_test(bitset_t *bs, unsigned long bit_offset)
 void cl_engine_set_clcb_pre_cache(struct cl_engine *engine, clcb_pre_cache callback)
 {
     engine->cb_pre_cache = callback;
+}
+
+void cl_engine_set_clcb_file_inspection(struct cl_engine *engine, clcb_file_inspection callback)
+{
+    engine->cb_file_inspection = callback;
 }
 
 void cl_engine_set_clcb_pre_scan(struct cl_engine *engine, clcb_pre_scan callback)

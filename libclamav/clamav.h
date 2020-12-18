@@ -64,6 +64,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdbool.h>
 
 #include "clamav-types.h"
 #include "clamav-version.h"
@@ -486,6 +487,39 @@ typedef cl_error_t (*clcb_pre_cache)(int fd, const char *type, void *context);
  * @param callback  The callback function pointer.
  */
 extern void cl_engine_set_clcb_pre_cache(struct cl_engine *engine, clcb_pre_cache callback);
+
+/**
+ * @brief Pre-scan callback.
+ *
+ * Called for each NEW file (inner and outer).
+ * Provides capability to record embedded file information during a scan.
+ *
+ * @param fd                  Current file descriptor which is about to be scanned.
+ * @param type                Current file type detected via magic - i.e. NOT on the fly - (e.g. "CL_TYPE_MSEXE").
+ * @param parent_file_name    Parent file name
+ * @param parent_file_size    Parent file size
+ * @param file_name           Current file name
+ * @param file_size           Current file size
+ * @param file_buffer         Current file buffer pointer
+ * @param recursion_level     Recursion level / depth of the current file
+ * @param was_decrypted       True if this layer a parent layer was encrypted and had been decrypted to produce this layer
+ * @param context             Opaque application provided data.
+ * @return                    CL_CLEAN = File is scanned.
+ * @return                    CL_BREAK = Whitelisted by callback - file is skipped and marked as clean.
+ * @return                    CL_VIRUS = Blacklisted by callback - file is skipped and marked as infected.
+ */
+typedef cl_error_t (*clcb_file_inspection)(int fd, const char *type, const char *parent_file_name,
+                                           size_t parent_file_size, const char *file_name, size_t file_size,
+                                           const char *file_buffer, uint32_t recursion_level, bool was_decrypted, void *context);
+/**
+ * @brief Set a custom file inspection callback function.
+ *
+ * Caution: changing options for an engine that is in-use is not thread-safe!
+ *
+ * @param engine    The initialized scanning engine.
+ * @param callback  The callback function pointer.
+ */
+extern void cl_engine_set_clcb_file_inspection(struct cl_engine *engine, clcb_file_inspection callback);
 
 /**
  * @brief Pre-scan callback.

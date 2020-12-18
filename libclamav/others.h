@@ -165,7 +165,7 @@ typedef struct recursion_level_tag {
     cl_fmap_t *fmap;                      /* The fmap for this layer. This used to be in an array in the ctx. */
     uint32_t recursion_level_buffer;      /* Which buffer layer in scan recursion. */
     uint32_t recursion_level_buffer_fmap; /* Which fmap layer in this buffer. */
-    bool is_normalized_layer;             /* Indicates that the layer should be skipped when checking container and intermediate types. */
+    uint32_t attributes;                  /* layer attributes. */
 } recursion_level_t;
 // #define CONTAINER_FLAG_VALID 0x01
 
@@ -189,7 +189,9 @@ typedef struct cli_ctx_tag {
     uint32_t recursion_stack_size;      /* stack size must == engine->max_recursion_level */
     uint32_t recursion_level;           /* Index into recursion_stack; current fmap recursion level from start of scan. */
     fmap_t *fmap;                       /* Pointer to current fmap in recursion_stack, varies with recursion depth. For convenience. */
-    bool next_layer_is_normalized;      /* Indicate that the next fmap pushed to the stack is normalized and should be ignored when checking container/intermediate types */
+    uint32_t next_layer_attributes;     /* Indicate attributes that should apply to the next layer created.
+                                         * Notably for LAYER_ATTRIBUTES_NORMALIZED: Indicate that the next fmap pushed to the stack is
+                                         * normalized and should be ignored when checking container/intermediate types */
     unsigned char handlertype_hash[16];
     struct cli_dconf *dconf;
     bitset_t *hook_lsig_matches;
@@ -385,6 +387,7 @@ struct cl_engine {
     crtmgr cmgr;
 
     /* Callback(s) */
+    clcb_file_inspection cb_file_inspection;
     clcb_pre_cache cb_pre_cache;
     clcb_pre_scan cb_pre_scan;
     clcb_post_scan cb_post_scan;
@@ -1102,5 +1105,28 @@ cl_error_t cli_get_filepath_from_filedesc(int desc, char **filepath);
  * @return cl_error_t   CL_SUCCESS if found, else an error code.
  */
 cl_error_t cli_realpath(const char *file_name, char **real_filename);
+
+#ifndef FREE
+#define FREE(var)          \
+    do {                   \
+        if (NULL != var) { \
+            free(var);     \
+            var = NULL;    \
+        }                  \
+    } while (0)
+#endif
+
+#ifndef CLI_CALLOC
+#define CLI_CALLOC(var, nmemb, size, ...) \
+    do {                                  \
+        (var) = cli_calloc(nmemb, size);  \
+        if (NULL == var) {                \
+            do {                          \
+                __VA_ARGS__;              \
+            } while (0);                  \
+            goto done;                    \
+        }                                 \
+    } while (0)
+#endif
 
 #endif

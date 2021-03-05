@@ -30,6 +30,18 @@ AC_CONFIG_AUX_DIR([config])
 dnl enable C++
 AC_PROG_CXX()
 
+dnl check for rust support
+if test "x$enable_libclamav_only" != "xyes"; then
+    AC_CHECK_PROG(CARGO, [cargo], [yes], [no])
+    AS_IF(test x$CARGO = xno,
+        AC_MSG_ERROR([cargo is required.  Please install the Rust toolchain from https://www.rust-lang.org/])
+    )
+    AC_CHECK_PROG(RUSTC, [rustc], [yes], [no])
+    AS_IF(test x$RUSTC = xno,
+        AC_MSG_ERROR([rustc is required.  Please install the Rust toolchain from https://www.rust-lang.org/])
+    )
+fi
+
 AH_BOTTOM([#include "platform.h"])
 AC_CONFIG_HEADERS([clamav-config.h libclammspack/config.h:libclammspack/config.h.in])
 
@@ -184,6 +196,17 @@ esac
 AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
 AM_CONDITIONAL([WINDOWS], [test "$build_windows" = "yes"])
 AM_CONDITIONAL([MACOS], [test "$build_mac" = "yes"])
+
+dnl Rust settings
+if test "x$enable_debug" = "xyes"; then
+    AC_SUBST(RUST_TARGET_SUBDIR, ["debug"])
+    AC_SUBST(CARGO_RELEASE_ARGS, [""])
+else
+    AC_SUBST(RUST_TARGET_SUBDIR, ["release"])
+    AC_SUBST(CARGO_RELEASE_ARGS, ["--release"])
+fi
+
+AM_CONDITIONAL([DEBUG_RELEASE], [test "x$enable_debug" = "xyes"])
 
 AC_CONFIG_FILES([
                  Makefile

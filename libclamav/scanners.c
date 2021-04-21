@@ -52,6 +52,8 @@
 
 #include <zlib.h>
 
+#include "clamav_rust.h"
+
 #include "clamav.h"
 #include "others.h"
 #include "dconf.h"
@@ -1506,7 +1508,8 @@ static cl_error_t vba_scandata(const unsigned char *data, size_t len, cli_ctx *c
     cli_ac_freedata(&tmdata);
     cli_ac_freedata(&gmdata);
 
-    return (ret != CL_CLEAN) ? ret : viruses_found ? CL_VIRUS : CL_CLEAN;
+    return (ret != CL_CLEAN) ? ret : viruses_found ? CL_VIRUS
+                                                   : CL_CLEAN;
 }
 
 #define min(x, y) ((x) < (y) ? (x) : (y))
@@ -4198,15 +4201,53 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
                 ret = cli_parsegif(ctx);
             break;
 
-        case CL_TYPE_PNG:
+        case CL_TYPE_PNG: {
+            struct timeval t1, t2;
+            int ds, dms;
+
+            size_t i              = 0;
+            cl_fmap_t *map        = *ctx->fmap;
+            uint8_t phash[8]      = {0};
+            const uint8_t *offset = fmap_need_off(map, 0, map->real_len);
+
+            gettimeofday(&t1, NULL);
+
+            ret = generate_phash(offset, map->real_len, phash, 8);
+
+            gettimeofday(&t2, NULL);
+            ds  = t2.tv_sec - t1.tv_sec;
+            dms = t2.tv_usec - t1.tv_usec;
+            ds -= (dms < 0) ? (1) : (0);
+            dms += (dms < 0) ? (1000000) : (0);
+            printf("Time: %d.%3.3d sec (%d m %d s)\n", ds, dms / 1000, ds / 60, ds % 60);
+
+            printf("Phash: ");
+            for (i = 0; i < 8; i++) {
+                printf("%02x", phash[i]);
+            }
+            printf("\n ");
+
             if (SCAN_HEURISTICS && (DCONF_OTHER & OTHER_CONF_PNG))
                 ret = cli_parsepng(ctx); /* PNG parser detects a couple CVE's as well as Broken.Media */
             break;
+        }
 
-        case CL_TYPE_JPEG:
+        case CL_TYPE_JPEG: {
+            size_t i              = 0;
+            cl_fmap_t *map        = *ctx->fmap;
+            uint8_t phash[8]      = {0};
+            const uint8_t *offset = fmap_need_off(map, 0, map->real_len);
+            ret                   = generate_phash(offset, map->real_len, phash, 8);
+            printf("Phash: ");
+            for (i = 0; i < 8; i++) {
+                printf("%02x", phash[i]);
+            }
+            printf("\n ");
+
             if (SCAN_HEURISTICS && (DCONF_OTHER & OTHER_CONF_JPEG))
                 ret = cli_parsejpeg(ctx); /* JPG parser detects MS04-028 exploits as well as Broken.Media */
             break;
+        }
 
         case CL_TYPE_TIFF:
             if (SCAN_HEURISTICS && SCAN_HEURISTIC_BROKEN_MEDIA && (DCONF_OTHER & OTHER_CONF_TIFF) && ret != CL_VIRUS)

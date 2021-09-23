@@ -17,7 +17,7 @@ no_includes = false
 after_includes = ""
 
 [export]
-include = []
+include = ["cdiff_apply"]
 exclude = [
     "cli_dbgmsg",
     "cli_errmsg",

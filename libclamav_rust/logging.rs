@@ -1,14 +1,15 @@
 /* rust logging module */
 
 use std::ffi::c_void;
+use std::ffi::CStr;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
 extern crate log;
 //use log::debug;
 
+use self::log::LevelFilter;
 use self::log::{Level, Metadata, Record};
-use self::log::{LevelFilter};
 
 extern "C" {
     fn cli_warnmsg(str: *const c_char, ...) -> c_void;
@@ -36,13 +37,13 @@ impl log::Log for ClamLogger {
                 Level::Error => unsafe {
                     cli_errmsg(ptr);
                 },
-                Level::Info => unsafe { 
+                Level::Info => unsafe {
                     cli_infomsg_simple(ptr);
                 },
                 Level::Warn => unsafe {
                     cli_warnmsg(ptr);
                 },
-                _ => {},
+                _ => {}
             }
         }
     }
@@ -55,4 +56,10 @@ pub extern "C" fn clrs_log_init() -> bool {
     log::set_boxed_logger(Box::new(ClamLogger))
         .map(|()| log::set_max_level(LevelFilter::Debug))
         .is_ok()
+}
+
+#[no_mangle]
+pub extern "C" fn clrs_eprint(c_buf: *const c_char) -> () {
+    let msg = unsafe { CStr::from_ptr(c_buf) }.to_str().unwrap();
+    eprint!("{}", msg);
 }

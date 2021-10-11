@@ -20,6 +20,7 @@
  *  MA 02110-1301, USA.
  */
 
+use std::ffi::CStr;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
@@ -86,4 +87,10 @@ mod tests {
         warn!("my old");
         error!("friend.");
     }
+}
+
+#[no_mangle]
+pub extern "C" fn clrs_eprint(c_buf: *const c_char) -> () {
+    let msg = unsafe { CStr::from_ptr(c_buf) }.to_str().unwrap();
+    eprint!("{}", msg);
 }

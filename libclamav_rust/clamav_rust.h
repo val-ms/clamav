@@ -14,4 +14,11 @@
 
 bool clrs_log_init(void);
 
+void clrs_eprint(const char *c_buf);
+
+uintptr_t generate_phash(const uint8_t *file_bytes,
+                         uintptr_t file_size,
+                         uint8_t *phash,
+                         uintptr_t phash_len);
+
 #endif /* __CLAMAV_RUST_H */

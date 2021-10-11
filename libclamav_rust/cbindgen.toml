@@ -17,7 +17,7 @@ no_includes = false
 after_includes = ""
 
 [export]
-include = []
+include = ["phash::calculate_phash"]
 exclude = [
     "cli_dbgmsg",
     "cli_errmsg",

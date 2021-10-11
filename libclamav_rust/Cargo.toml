@@ -7,7 +7,9 @@ version = "0.0.1"
 opt-level = 2
 
 [dependencies]
-log = {version = "*", features = ["std"]} 
+image = "*"
+img_hash = "*"
+log = {version = "*", features = ["std"]}
 
 [lib]
 crate-type = ["staticlib"]

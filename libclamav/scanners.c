@@ -115,6 +115,8 @@
 #include "execs.h"
 #include "egg.h"
 
+#include "clamav_rust.h"
+
 // libclamunrar_iface
 #include "unrar_iface.h"
 
@@ -4353,15 +4355,43 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
                 ret = cli_parsegif(ctx);
             break;
 
-        case CL_TYPE_PNG:
+        case CL_TYPE_PNG: {
+            size_t i              = 0;
+            cl_fmap_t *map        = *ctx->fmap;
+            uint8_t phash[8]      = {0};
+            const uint8_t *offset = fmap_need_off_once(map, 0, map->real_len);
+
+            ret = generate_phash(offset, map->real_len, phash, 8);
+
+            printf("Phash: ");
+            for (i = 0; i < 8; i++) {
+                printf("%02x", phash[i]);
+            }
+            printf("\n ");
+
             if (SCAN_HEURISTICS && (DCONF_OTHER & OTHER_CONF_PNG))
                 ret = cli_parsepng(ctx); /* PNG parser detects a couple CVE's as well as Broken.Media */
             break;
+        }
 
-        case CL_TYPE_JPEG:
+        case CL_TYPE_JPEG: {
+            size_t i              = 0;
+            cl_fmap_t *map        = *ctx->fmap;
+            uint8_t phash[8]      = {0};
+            const uint8_t *offset = fmap_need_off_once(map, 0, map->real_len);
+
+            ret = generate_phash(offset, map->real_len, phash, 8);
+
+            printf("Phash: ");
+            for (i = 0; i < 8; i++) {
+                printf("%02x", phash[i]);
+            }
+            printf("\n ");
+
             if (SCAN_HEURISTICS && (DCONF_OTHER & OTHER_CONF_JPEG))
                 ret = cli_parsejpeg(ctx); /* JPG parser detects MS04-028 exploits as well as Broken.Media */
             break;
+        }
 
         case CL_TYPE_TIFF:
             if (SCAN_HEURISTICS && SCAN_HEURISTIC_BROKEN_MEDIA && (DCONF_OTHER & OTHER_CONF_TIFF) && ret != CL_VIRUS)

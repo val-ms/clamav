@@ -175,7 +175,7 @@ void cli_infomsg_simple(const char *str, ...)
 
 inline void cli_dbgmsg(const char *str, ...)
 {
-    if (!UNLIKELY(cli_get_debug_flag())) {
+    if (UNLIKELY(cli_get_debug_flag())) {
         MSGCODE(buff, len, "LibClamAV debug: ");
         fputs(buff, stderr);
     }

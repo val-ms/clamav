@@ -146,7 +146,7 @@ function(add_rust_library)
         set(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${LIB_TARGET}/${LIB_BUILD_TYPE}/lib${ARGS_TARGET}.a")
     endif()
 
-    file(GLOB_RECURSE LIB_SOURCES "${ARGS_WORKING_DIRECTORY}/*.rs")
+    file(GLOB_RECURSE LIB_SOURCES "${ARGS_WORKING_DIRECTORY}/src/*.rs")
 
     set(MY_CARGO_ARGS ${CARGO_ARGS})
     list(APPEND MY_CARGO_ARGS "--target-dir" ${CMAKE_CURRENT_BINARY_DIR})

@@ -1,6 +1,6 @@
 [workspace]
 
 members = [
-    "libclamav_rust/cdiff",
+    "libclamav_rust",
 ]
 

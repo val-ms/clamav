@@ -37,8 +37,7 @@ endif()
 target_link_libraries( sigtool
     PRIVATE
         ClamAV::libclamav
-        ClamAV::common
-        ClamAV::cdiff )
+        ClamAV::common )
 if(WIN32)
     install(TARGETS sigtool DESTINATION . COMPONENT programs)
 else()

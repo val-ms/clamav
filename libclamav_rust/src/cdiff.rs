@@ -31,6 +31,7 @@ use std::{
 };
 
 use flate2::read::GzDecoder;
+use log::*;
 use openssl::sha;
 use thiserror::Error;
 
@@ -204,12 +205,11 @@ impl<'a> XchgOp<'a> {
 extern "C" {
     /// int cli_versig2(const unsigned char *sha256, const char *dsig_str, const char *n_str, const char *e_str)
     fn cli_versig2(digest: *const u8, dsig: *const i8, n: *const u8, e: *const u8) -> i32;
-    fn logg(fmt: *const u8, args: ...) -> i32;
 }
 
 #[no_mangle]
-pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
-    eprintln!(
+pub extern "C" fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
+    debug!(
         "cdiff_apply called with file_descriptor={}, mode={}",
         file_descriptor, mode
     );
@@ -219,10 +219,10 @@ pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
     let path = std::env::current_dir().unwrap();
     println!("The current directory is {}", path.display());
 
-    eprintln!("Opening file descriptor");
+    debug!("Opening file descriptor");
 
     let mut file = unsafe { File::from_raw_fd(file_descriptor) };
-    eprintln!("Printing contents of file...");
+    debug!("Printing contents of file...");
 
     let mut header_length: usize = 0;
 
@@ -232,11 +232,11 @@ pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
         let dsig = match dsig {
             Ok(dsig) => dsig,
             Err(e) => {
-                eprintln!("{:?}", e.to_string());
+                debug!("{:?}", e.to_string());
                 return -1;
             }
         };
-        eprintln!("Final dsig length is {}", dsig.len());
+        debug!("Final dsig length is {}", dsig.len());
         print_file_data(dsig.clone(), dsig.len() as usize);
 
         // Get file length
@@ -260,8 +260,8 @@ pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
             }
         };
 
-        //eprintln!("sha256 is {} bytes", sha256.len());
-        eprintln!("sha256: {}", hex::encode(sha256));
+        //debug!("sha256 is {} bytes", sha256.len());
+        debug!("sha256: {}", hex::encode(sha256));
 
         // cli_versig2 will expect dsig to be a null-terminated string
         let dsig_cstring = CString::new(dsig);
@@ -283,7 +283,7 @@ pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
             )
         };
         if versig_result != 0 {
-            eprintln!("cdiff_apply: Incorrect digital signature");
+            debug!("cdiff_apply: Incorrect digital signature");
             return -1;
         }
 
@@ -296,7 +296,7 @@ pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
                 return -1;
             }
         };
-        eprintln!(
+        debug!(
             "Header len is {}, file len is {}, header offset is {}",
             header_len, file_len, header_offset
         );
@@ -305,11 +305,11 @@ pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
         let current_pos = match current_pos {
             Ok(current_pos) => current_pos as usize,
             Err(e) => {
-                eprintln!("{}", e.to_string());
+                debug!("{}", e.to_string());
                 return -1;
             }
         };
-        eprintln!("Current file offset is {}", current_pos);
+        debug!("Current file offset is {}", current_pos);
         header_length = header_len as usize;
     }
 
@@ -332,7 +332,7 @@ pub fn cdiff_apply(file_descriptor: i32, mode: u16) -> i32 {
     match process_lines(&mut ctx, reader, header_length) {
         Ok(_) => 0,
         Err(e) => {
-            eprintln!("{}", e.to_string());
+            debug!("{}", e.to_string());
             -1
         }
     }
@@ -353,7 +353,7 @@ fn cmd_open(ctx: &mut Context, db_name: std::string::String) -> Result<(), Cdiff
     }
     ctx.open_db = Some(db_name);
 
-    eprintln!("data {:?}", ctx.open_db);
+    debug!("data {:?}", ctx.open_db);
     Ok(())
 }
 
@@ -377,7 +377,7 @@ fn cmd_add(ctx: &mut Context, signature: std::string::String) -> Result<(), Cdif
     }
 
     Ok(())
-    // eprintln!("signature {:?}", ctx.add_start);
+    // debug!("signature {:?}", ctx.add_start);
 }
 
 /// Set up Context structure with data parsed from command delete
@@ -388,7 +388,7 @@ fn cmd_del(mut ctx: &mut Context, del_op: DelOp) -> Result<(), CdiffError> {
         _ => return Err(CdiffError::NoDBForAction("DEL".to_string())),
     }
 
-    eprintln!("Deleting {} on line {}", del_op.del_line, del_op.line_no);
+    debug!("Deleting {} on line {}", del_op.del_line, del_op.line_no);
 
     // Create a new node for deletion
     let del_node = DelNode {
@@ -401,16 +401,16 @@ fn cmd_del(mut ctx: &mut Context, del_op: DelOp) -> Result<(), CdiffError> {
         Some(del_start) => {
             let n = (*del_start).len() - 1;
             for i in 0..=n {
-                // eprintln!(
+                // debug!(
                 //     "Deletion: Inserting line_no {} with current line_no {}",
                 //     del_op.line_no, del_start[i].line_no
                 // );
                 if del_op.line_no < del_start[i].line_no {
-                    //eprintln!("Deletion: Inserting into element {}", i);
+                    //debug!("Deletion: Inserting into element {}", i);
                     (*del_start).insert(i, del_node);
                     break;
                 } else if i == n {
-                    //eprintln!("Deletion: Appending to node list");
+                    //debug!("Deletion: Appending to node list");
                     (*del_start).push(del_node);
                     break;
                 }
@@ -418,7 +418,7 @@ fn cmd_del(mut ctx: &mut Context, del_op: DelOp) -> Result<(), CdiffError> {
         }
         _ => {
             let del_start = vec![del_node];
-            //eprintln!("Deletion: Creating new node list");
+            //debug!("Deletion: Creating new node list");
             ctx.del_start = Some(del_start);
         }
     }
@@ -433,7 +433,7 @@ fn cmd_xchg(mut ctx: &mut Context, xchg_op: XchgOp) -> Result<(), CdiffError> {
         _ => return Err(CdiffError::NoDBForAction("XCHG".to_string())),
     }
 
-    eprintln!(
+    debug!(
         "Exchanging {} with {} on line {}",
         xchg_op.orig_line, xchg_op.new_line, xchg_op.line_no
     );
@@ -452,7 +452,7 @@ fn cmd_xchg(mut ctx: &mut Context, xchg_op: XchgOp) -> Result<(), CdiffError> {
         }
         _ => {
             let mut xchg_start = Vec::new();
-            eprintln!("Exchange: Creating new node list");
+            debug!("Exchange: Creating new node list");
             xchg_start.push(xchg_node);
             ctx.xchg_start = Some(xchg_start);
         }
@@ -504,7 +504,7 @@ fn cmd_move(ctx: &mut Context, move_op: MoveOp) -> Result<(), CdiffError> {
                 state = State::Move;
                 writeln!(dst_file, "{}", line)?;
             } else {
-                eprintln!("{} does not match {}", line, move_op.start_line);
+                debug!("{} does not match {}", line, move_op.start_line);
                 return Err(CdiffError::PatternDoesNotMatch(
                     "MOVE".to_string(),
                     line_no,
@@ -554,7 +554,7 @@ fn cmd_close(mut ctx: &mut Context) -> Result<(), CdiffError> {
     }
 
     let open_db = ctx.open_db.as_ref().unwrap();
-    eprintln!("Close DB {}", open_db);
+    debug!("Close DB {}", open_db);
 
     let mut delete_lines: bool = false;
     let mut xchg_lines: bool = false;
@@ -621,7 +621,7 @@ fn cmd_close(mut ctx: &mut Context) -> Result<(), CdiffError> {
             {
                 let del_line = &del_vec[cur_del_node].del_line;
 
-                eprintln!(
+                debug!(
                     "deleting line on line_no starting with: {} {} {}",
                     line, line_no, del_line
                 );
@@ -647,7 +647,7 @@ fn cmd_close(mut ctx: &mut Context) -> Result<(), CdiffError> {
                 let orig_line = &xchg_vec[cur_xchg_node].orig_line;
                 let new_line = &xchg_vec[cur_xchg_node].new_line;
 
-                eprintln!("Comparing line with orig_line: {} == {}", line, orig_line);
+                debug!("Comparing line with orig_line: {} == {}", line, orig_line);
                 if !line.starts_with(orig_line.as_str()) {
                     return Err(CdiffError::PatternDoesNotMatch(
                         "exchange".to_string(),
@@ -687,7 +687,7 @@ fn cmd_close(mut ctx: &mut Context) -> Result<(), CdiffError> {
     if let Some(add_start) = &ctx.add_start {
         let mut db_file = OpenOptions::new().append(true).open(open_db.clone())?;
         for sig in add_start {
-            eprintln!("Writing signature {} to file {}", sig, open_db);
+            debug!("Writing signature {} to file {}", sig, open_db);
             writeln!(db_file, "{}", sig)?;
         }
         ctx.add_start = None;
@@ -695,7 +695,7 @@ fn cmd_close(mut ctx: &mut Context) -> Result<(), CdiffError> {
     ctx.open_db = None;
     ctx.del_start = None;
     ctx.xchg_start = None;
-    eprintln!("Close finished");
+    debug!("Close finished");
     Ok(())
 }
 
@@ -716,7 +716,7 @@ fn process_line(ctx: &mut Context, line: String) -> Result<(), CdiffError> {
         None => match line == "CLOSE" {
             true => 0,
             _ => {
-                unsafe { logg(b"Unable to parse cmd\n".as_ptr()) };
+                error!("Unable to parse cmd");
                 process::abort();
             }
         },
@@ -733,7 +733,7 @@ fn process_line(ctx: &mut Context, line: String) -> Result<(), CdiffError> {
     let data: String = line.chars().skip(spc_idx + 1).collect::<String>();
     let data: String = data.trim().to_owned();
 
-    eprintln!("cmd = {}", cmd);
+    debug!("cmd = {}", cmd);
 
     // Call the appropriate command function
     match cmd.as_str() {
@@ -773,12 +773,12 @@ where
             Ok(line) => {
                 // Line buffer resize commands are a vestige from cdiff.c
                 if line.starts_with('#') {
-                    eprintln!("Buffer resize detected in line {}", line);
+                    debug!("Buffer resize detected in line {}", line);
                     continue;
                 }
                 n += 1;
                 decompressed_bytes = decompressed_bytes + line.len() + 1;
-                eprintln!("Line {}: {:?}", n, line);
+                debug!("Line {}: {:?}", n, line);
                 process_line(ctx, line)?;
             }
             Err(e) => {
@@ -786,7 +786,7 @@ where
             }
         }
     }
-    eprintln!(
+    debug!(
         "Expected {} decompressed bytes, read {} decompressed bytes",
         uncompressed_size, decompressed_bytes
     );
@@ -804,7 +804,7 @@ fn read_dsig(file: &mut File) -> Result<Vec<u8>, CdiffError> {
     // Read from dsig_offset to EOF
     let mut dsig: Vec<u8> = vec![];
     file.read_to_end(&mut dsig)?;
-    eprintln!("dsig length is {}", dsig.len());
+    debug!("dsig length is {}", dsig.len());
     // Find the signature
     let offset: usize = MAX_DSIG_SIZE + 1;
     // Read in reverse until the delimiter ':' is found
@@ -838,7 +838,7 @@ fn read_size(file: &mut File) -> Result<(u32, usize), CdiffError> {
     let n = file.take(FILEBUFF as u64).read_to_end(&mut buf)?;
     let mut colons = 0;
     let mut file_size_vec = Vec::new();
-    eprintln!("n == {}", n);
+    debug!("n == {}", n);
     //for i in 0..=n {
     for (i, value) in buf.iter().enumerate().take(n + 1) {
         // Colon found, increment count.
@@ -853,7 +853,7 @@ fn read_size(file: &mut File) -> Result<(u32, usize), CdiffError> {
         // We are done reading the file size.
         if colons == 3 {
             let file_size_str = String::from_utf8(file_size_vec)?;
-            eprintln!("file_size_str == {}", file_size_str);
+            debug!("file_size_str == {}", file_size_str);
             return Ok((file_size_str.parse::<u32>()?, i + 1));
         }
     }
@@ -894,10 +894,10 @@ fn print_file_data(buf: Vec<u8>, len: usize) {
     for (i, value) in buf.iter().enumerate().take(len) {
         eprint!("{:#02X} ", value);
         if (i + 1) % 16 == 0 {
-            eprintln!();
+            debug!("");
         }
     }
-    eprintln!("\n");
+    debug!("\n");
 }
 
 #[cfg(test)]
@@ -917,7 +917,7 @@ mod tests {
 
     #[test]
     fn parse_move_works() {
-        eprintln!("MOVE was called!");
+        debug!("MOVE was called!");
 
         let move_op = MoveOp::new("a b 1 hello 2 world").expect("Should've worked!");
 
@@ -933,7 +933,7 @@ mod tests {
 
     #[test]
     fn parse_move_fail_int() {
-        eprintln!("MOVE was called!");
+        debug!("MOVE was called!");
 
         let err = MoveOp::new("a b NOTANUMBER hello 2 world").expect_err("Should've failed!");
         let parse_string = "NOTANUMBER".to_string();
@@ -945,7 +945,7 @@ mod tests {
 
     #[test]
     fn parse_move_fail_eof() {
-        eprintln!("MOVE was called!");
+        debug!("MOVE was called!");
 
         let err = MoveOp::new("a b 1").expect_err("Should've failed!");
         let start_line_err = CdiffError::NoMoreData("start_line".to_string());
@@ -983,7 +983,7 @@ mod tests {
                 expected_line,
                 line.expect("Failed to read line from temp file")
             );
-            eprintln!(
+            debug!(
                 "Data \"{}\" matches expected result on line {}",
                 expected_line, index
             );

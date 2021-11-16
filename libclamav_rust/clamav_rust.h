@@ -12,6 +12,16 @@
 #include "libclamav/others.h"
 
 
+/**
+ * int cli_versig2(const unsigned char *sha256, const char *dsig_str, const char *n_str, const char *e_str)
+ */
+extern int32_t cli_versig2(const uint8_t *digest,
+                           const int8_t *dsig,
+                           const uint8_t *n,
+                           const uint8_t *e);
+
+int32_t cdiff_apply(int32_t file_descriptor, uint16_t mode);
+
 bool clrs_log_init(void);
 
 #endif /* __CLAMAV_RUST_H */

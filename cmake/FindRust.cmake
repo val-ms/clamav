@@ -223,7 +223,7 @@ function(add_rust_test)
     cmake_parse_arguments(ARGS "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     add_test(
-        NAME test-${ARGS_NAME}
+        NAME ${ARGS_NAME}
         COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR}" ${cargo_EXECUTABLE} test -vv --color always
         WORKING_DIRECTORY ${ARGS_WORKING_DIRECTORY}
     )

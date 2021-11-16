@@ -962,6 +962,12 @@ else()
         COMPONENT libraries)
 endif()
 
+# include CTest to enable testing before we add any subdirectories which may
+# add additional tests (like with `add_rust_test()`)
+if(ENABLE_TESTS)
+    include(CTest)
+endif()
+
 #
 # ClamAV Build targets!
 #
@@ -1035,7 +1041,6 @@ if(ENABLE_EXAMPLES)
     add_subdirectory( examples )
 endif()
 
-include(CTest)
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 if(ENABLE_TESTS)
     add_subdirectory( unit_tests )

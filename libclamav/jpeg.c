@@ -312,8 +312,10 @@ cl_error_t cli_parsejpeg(cli_ctx *ctx)
 {
     cl_error_t status = CL_CLEAN;
 
-    fmap_t *map = NULL;
-    jpeg_marker_t marker, prev_marker, prev_segment = JPEG_MARKER_NOT_A_MARKER_0x00;
+    fmap_t *map          = NULL;
+    jpeg_marker_t marker = JPEG_MARKER_NOT_A_MARKER_0x00;
+    jpeg_marker_t prev_marker;
+    jpeg_marker_t prev_segment = JPEG_MARKER_NOT_A_MARKER_0x00;
     uint8_t buff[50]; /* 50 should be sufficient for now */
     uint16_t len_u16;
     unsigned int offset = 0, i, len, segment = 0;
@@ -661,18 +663,50 @@ cl_error_t cli_parsejpeg(cli_ctx *ctx)
                         goto done;
                     }
                 }
-                goto done;
+                // goto done;
+                break;
 
-            case JPEG_MARKER_SEGMENT_SOS_START_OF_SCAN: /* SOS */
+            case JPEG_MARKER_SEGMENT_SOS_START_OF_SCAN: /* SOS */ {
+                size_t remaining_len     = map->len - offset;
+                const uint8_t *remaining = NULL;
+                size_t remaining_index;
+
                 cli_dbgmsg(" Start of Scan (SOS) segment marker\n");
                 if (!found_app) {
                     cli_dbgmsg(" Found the Start-of-Scan segment without identifying the JPEG application type.\n");
                 }
-                /* What follows would be scan data (compressed image data),
-                 * parsing is not presently required for validation purposes
-                 * so we'll just call it quits. */
-                goto done;
+                // /* What follows would be scan data (compressed image data),
+                //  * parsing is not presently required for validation purposes
+                //  * so we'll just call it quits. */
+                // goto done;
 
+                // Iterate the compressed data searching for 0xFFXX markers, excluding:
+                // - 0xFFFF  (a compressed 0xFF value)
+                // - 0xFFD0 - 0xFFD7  (restart markers, not useful unless decompressing)
+                remaining = fmap_need_off_once(map, offset, remaining_len);
+                if (NULL == remaining) {
+                    cli_dbgmsg("Failed to get pointer remaining data\n");
+                    status = CL_EPARSE;
+                    goto scan_overlay;
+                }
+
+                printf("looking for marker after compressed data\n");
+                for (remaining_index = 0; remaining_index < remaining_len - 1; remaining_index++) {
+                    // if (remaining[remaining_index] == 0xff &&
+                    //     !(remaining[remaining_index] + 1 == 0xff ||
+                    //       (remaining[remaining_index] + 1 >= 0xd0 &&
+                    //        remaining[remaining_index] + 1 <= 0xd7))) {
+                    if (remaining[remaining_index] == 0xff && remaining[remaining_index] + 1 == 0xd9) {
+                        // Found next header outside of compressed scan data.
+                        cli_dbgmsg("Found next header outside of compressed scan data at offset: %zu\n", offset + remaining_index - 1);
+                        break;
+                    }
+                }
+                if (remaining_index > 0) {
+                    offset += remaining_index - 1;
+                }
+                break;
+            }
             case JPEG_MARKER_SEGMENT_EOI_END_OF_IMAGE: /* EOI (End of Image) */
                 cli_dbgmsg(" End of Image (EOI) segment marker\n");
                 /*
@@ -683,7 +717,8 @@ cl_error_t cli_parsejpeg(cli_ctx *ctx)
                     cli_append_possibly_unwanted(ctx, "Heuristics.Broken.Media.JPEG.NoImages");
                     status = CL_EPARSE;
                 }
-                goto done;
+                // goto done;
+                goto scan_overlay;
 
             case JPEG_MARKER_SEGMENT_COM_COMMENT: /* COM (comment) */
                 cli_dbgmsg(" Comment (COM) segment marker\n");
@@ -713,6 +748,21 @@ cl_error_t cli_parsejpeg(cli_ctx *ctx)
 
         prev_segment = marker;
     }
+
+scan_overlay:
+    if (status == CL_EPARSE) {
+        /* We added with cli_append_possibly_unwanted so it will alert at the end if nothing else matches. */
+        status = CL_CLEAN;
+    }
+
+    /* Check if there's an overlay, and scan it if one exists. */
+    if (map->len > offset) {
+        cli_dbgmsg("JPEG: Found " STDu64 " additional data after end of JPEG! Scanning as a nested file.\n", map->len - offset);
+        status = cli_magic_scan_nested_fmap_type(map, (size_t)offset, map->len - offset, ctx, CL_TYPE_ANY, NULL);
+        goto done;
+    }
+
+    status = CL_CLEAN;
 
 done:
     if (status == CL_EPARSE) {

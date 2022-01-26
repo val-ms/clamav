@@ -113,20 +113,6 @@ static void help(void)
 
 static struct optstruct *opts;
 
-/* When running under valgrind and daemonizing, valgrind incorrectly reports
- * leaks from the engine, because it can't see that all the memory is still
- * reachable (some pointers are stored mangled in the JIT).
- * So free the engine on exit from the parent too (during daemonize)
- */
-static struct cl_engine *gengine = NULL;
-static void free_engine(void)
-{
-    if (gengine) {
-        cl_engine_free(gengine);
-        gengine = NULL;
-    }
-}
-
 int main(int argc, char **argv)
 {
     static struct cl_engine *engine = NULL;
@@ -284,14 +270,11 @@ int main(int argc, char **argv)
             }
         }
 #endif
-        gengine = engine;
-        atexit(free_engine);
         daemonizeRet = daemonize_parent_wait(user_name, logg_file);
         if (daemonizeRet < 0) {
             logg("!daemonize() failed: %s\n", strerror(errno));
             return 1;
         }
-        gengine = NULL;
 #ifdef C_BSD
         for (ret = 0; (unsigned int)ret < nlsockets; ret++) {
             if (fcntl(lsockets[ret], F_SETFL, fcntl(lsockets[ret], F_GETFL) & ~O_NONBLOCK) == -1) {
@@ -327,7 +310,7 @@ int main(int argc, char **argv)
         umask(old_umask);
 
 #ifndef _WIN32
-        /*If the file has already been created by a different user, it will just be
+        /* If the file has already been created by a different user, it will just be
          * rewritten by us, but not change the ownership, so do that explicitly.
          */
         if (0 == geteuid()) {
@@ -366,476 +349,453 @@ int main(int argc, char **argv)
     }
 #endif /* _WIN32 */
 
-    do { /* logger initialized */
+    if (optget(opts, "DevLiblog")->enabled)
+        cl_set_clcb_msg(msg_callback);
 
-        if (optget(opts, "DevLiblog")->enabled)
-            cl_set_clcb_msg(msg_callback);
+    if ((ret = cl_init(CL_INIT_DEFAULT))) {
+        logg("!Can't initialize libclamav: %s\n", cl_strerror(ret));
+        ret = 1;
+        goto done;
+    }
 
-        if ((ret = cl_init(CL_INIT_DEFAULT))) {
-            logg("!Can't initialize libclamav: %s\n", cl_strerror(ret));
-            ret = 1;
-            break;
-        }
-
-        if (optget(opts, "Debug")->enabled) {
-            /* enable debug messages in libclamav */
-            cl_debug();
-            logg_verbose = 2;
-        }
+    if (optget(opts, "Debug")->enabled) {
+        /* enable debug messages in libclamav */
+        cl_debug();
+        logg_verbose = 2;
+    }
 
 #if defined(USE_SYSLOG) && !defined(C_AIX)
-        if (optget(opts, "LogSyslog")->enabled) {
-            int fac = LOG_LOCAL6;
+    if (optget(opts, "LogSyslog")->enabled) {
+        int fac = LOG_LOCAL6;
 
-            opt = optget(opts, "LogFacility");
-            if ((fac = logg_facility(opt->strarg)) == -1) {
-                logg("!LogFacility: %s: No such facility.\n", opt->strarg);
-                ret = 1;
-                break;
-            }
-
-            openlog("clamd", LOG_PID, fac);
-            logg_syslog = 1;
+        opt = optget(opts, "LogFacility");
+        if ((fac = logg_facility(opt->strarg)) == -1) {
+            logg("!LogFacility: %s: No such facility.\n", opt->strarg);
+            ret = 1;
+            goto done;
         }
+
+        openlog("clamd", LOG_PID, fac);
+        logg_syslog = 1;
+    }
 #endif
 
 #ifdef C_LINUX
-        procdev = 0;
-        if (CLAMSTAT("/proc", &sb) != -1 && !sb.st_size)
-            procdev = sb.st_dev;
+    procdev = 0;
+    if (CLAMSTAT("/proc", &sb) != -1 && !sb.st_size)
+        procdev = sb.st_dev;
 #endif
 
-        /* check socket type */
+    /* check socket type */
 
-        if (optget(opts, "TCPSocket")->enabled)
-            tcpsock = 1;
+    if (optget(opts, "TCPSocket")->enabled)
+        tcpsock = 1;
 
-        if (optget(opts, "LocalSocket")->enabled)
-            localsock = 1;
+    if (optget(opts, "LocalSocket")->enabled)
+        localsock = 1;
 
-        logg("#Received %d file descriptor(s) from systemd.\n", num_fd);
+    logg("#Received %d file descriptor(s) from systemd.\n", num_fd);
 
-        if (!tcpsock && !localsock && num_fd == 0) {
-            logg("!Please define server type (local and/or TCP).\n");
-            ret = 1;
-            break;
-        }
+    if (!tcpsock && !localsock && num_fd == 0) {
+        logg("!Please define server type (local and/or TCP).\n");
+        ret = 1;
+        goto done;
+    }
 
-        logg("#clamd daemon %s (OS: " TARGET_OS_TYPE ", ARCH: " TARGET_ARCH_TYPE ", CPU: " TARGET_CPU_TYPE ")\n", get_version());
+    logg("#clamd daemon %s (OS: " TARGET_OS_TYPE ", ARCH: " TARGET_ARCH_TYPE ", CPU: " TARGET_CPU_TYPE ")\n", get_version());
 
 #ifndef _WIN32
-        if (user)
-            logg("#Running as user %s (UID %u, GID %u)\n", user->pw_name, user->pw_uid, user->pw_gid);
+    if (user)
+        logg("#Running as user %s (UID %u, GID %u)\n", user->pw_name, user->pw_uid, user->pw_gid);
 #endif
 
 #if defined(RLIMIT_DATA) && defined(C_BSD)
-        if (getrlimit(RLIMIT_DATA, &rlim) == 0) {
-            /* bb #1941.
+    if (getrlimit(RLIMIT_DATA, &rlim) == 0) {
+        /* bb #1941.
             * On 32-bit FreeBSD if you set ulimit -d to >2GB then mmap() will fail
             * too soon (after ~120 MB).
             * Set limit lower than 2G if on 32-bit */
-            uint64_t lim = rlim.rlim_cur;
-            if (sizeof(void *) == 4 &&
-                lim > (1ULL << 31)) {
-                rlim.rlim_cur = 1ULL << 31;
-                if (setrlimit(RLIMIT_DATA, &rlim) < 0)
-                    logg("!setrlimit(RLIMIT_DATA) failed: %s\n", strerror(errno));
-                else
-                    logg("Running on 32-bit system, and RLIMIT_DATA > 2GB, lowering to 2GB!\n");
-            }
+        uint64_t lim = rlim.rlim_cur;
+        if (sizeof(void *) == 4 &&
+            lim > (1ULL << 31)) {
+            rlim.rlim_cur = 1ULL << 31;
+            if (setrlimit(RLIMIT_DATA, &rlim) < 0)
+                logg("!setrlimit(RLIMIT_DATA) failed: %s\n", strerror(errno));
+            else
+                logg("Running on 32-bit system, and RLIMIT_DATA > 2GB, lowering to 2GB!\n");
         }
+    }
 #endif
 
-        if (logg_size)
-            logg("#Log file size limited to %lld bytes.\n", (long long int)logg_size);
-        else
-            logg("#Log file size limit disabled.\n");
+    if (logg_size)
+        logg("#Log file size limited to %lld bytes.\n", (long long int)logg_size);
+    else
+        logg("#Log file size limit disabled.\n");
 
-        min_port = optget(opts, "StreamMinPort")->numarg;
-        max_port = optget(opts, "StreamMaxPort")->numarg;
-        if (min_port < 1024 || min_port > max_port || max_port > 65535) {
-            logg("!Invalid StreamMinPort/StreamMaxPort: %d, %d\n", min_port, max_port);
-            ret = 1;
-            break;
-        }
+    min_port = optget(opts, "StreamMinPort")->numarg;
+    max_port = optget(opts, "StreamMaxPort")->numarg;
+    if (min_port < 1024 || min_port > max_port || max_port > 65535) {
+        logg("!Invalid StreamMinPort/StreamMaxPort: %d, %d\n", min_port, max_port);
+        ret = 1;
+        goto done;
+    }
 
-        if (!(engine = cl_engine_new())) {
-            logg("!Can't initialize antivirus engine\n");
-            ret = 1;
-            break;
-        }
+    if (!(engine = cl_engine_new())) {
+        logg("!Can't initialize antivirus engine\n");
+        ret = 1;
+        goto done;
+    }
 
-        if (optget(opts, "disable-cache")->enabled)
-            cl_engine_set_num(engine, CL_ENGINE_DISABLE_CACHE, 1);
+    if (optget(opts, "disable-cache")->enabled)
+        cl_engine_set_num(engine, CL_ENGINE_DISABLE_CACHE, 1);
 
-        /* load the database(s) */
-        dbdir = optget(opts, "DatabaseDirectory")->strarg;
-        logg("#Reading databases from %s\n", dbdir);
+    /* load the database(s) */
+    dbdir = optget(opts, "DatabaseDirectory")->strarg;
+    logg("#Reading databases from %s\n", dbdir);
 
-        if (optget(opts, "DetectPUA")->enabled) {
-            dboptions |= CL_DB_PUA;
+    if (optget(opts, "DetectPUA")->enabled) {
+        dboptions |= CL_DB_PUA;
 
-            if ((opt = optget(opts, "ExcludePUA"))->enabled) {
-                dboptions |= CL_DB_PUA_EXCLUDE;
-                i = 0;
-                logg("#Excluded PUA categories:");
+        if ((opt = optget(opts, "ExcludePUA"))->enabled) {
+            dboptions |= CL_DB_PUA_EXCLUDE;
+            i = 0;
+            logg("#Excluded PUA categories:");
 
-                while (opt) {
-                    if (!(pua_cats = realloc(pua_cats, i + strlen(opt->strarg) + 3))) {
-                        logg("!Can't allocate memory for pua_cats\n");
-                        cl_engine_free(engine);
-                        ret = 1;
-                        break;
-                    }
+            while (opt) {
+                CLI_REALLOC(pua_cats, i + strlen(opt->strarg) + 3, ret = 1);
 
-                    logg("# %s", opt->strarg);
+                logg("# %s", opt->strarg);
 
-                    sprintf(pua_cats + i, ".%s", opt->strarg);
-                    i += strlen(opt->strarg) + 1;
-                    pua_cats[i] = 0;
-                    opt         = opt->nextarg;
-                }
-
-                if (ret)
-                    break;
-
-                logg("#\n");
-                pua_cats[i]     = '.';
-                pua_cats[i + 1] = 0;
+                sprintf(pua_cats + i, ".%s", opt->strarg);
+                i += strlen(opt->strarg) + 1;
+                pua_cats[i] = 0;
+                opt         = opt->nextarg;
             }
 
-            if ((opt = optget(opts, "IncludePUA"))->enabled) {
-                if (pua_cats) {
-                    logg("!ExcludePUA and IncludePUA cannot be used at the same time\n");
-                    free(pua_cats);
-                    ret = 1;
-                    break;
-                }
+            logg("#\n");
+            pua_cats[i]     = '.';
+            pua_cats[i + 1] = 0;
+        }
 
-                dboptions |= CL_DB_PUA_INCLUDE;
-                i = 0;
-                logg("#Included PUA categories:");
-                while (opt) {
-                    if (!(pua_cats = realloc(pua_cats, i + strlen(opt->strarg) + 3))) {
-                        logg("!Can't allocate memory for pua_cats\n");
-                        ret = 1;
-                        break;
-                    }
-
-                    logg("# %s", opt->strarg);
-
-                    sprintf(pua_cats + i, ".%s", opt->strarg);
-                    i += strlen(opt->strarg) + 1;
-                    pua_cats[i] = 0;
-                    opt         = opt->nextarg;
-                }
-
-                if (ret)
-                    break;
-
-                logg("#\n");
-                pua_cats[i]     = '.';
-                pua_cats[i + 1] = 0;
-            }
-
+        if ((opt = optget(opts, "IncludePUA"))->enabled) {
             if (pua_cats) {
-                if ((ret = cl_engine_set_str(engine, CL_ENGINE_PUA_CATEGORIES, pua_cats))) {
-                    logg("!cli_engine_set_str(CL_ENGINE_PUA_CATEGORIES) failed: %s\n", cl_strerror(ret));
-                    free(pua_cats);
-                    ret = 1;
-                    break;
-                }
-                free(pua_cats);
-            }
-        } else {
-            logg("#Not loading PUA signatures.\n");
-        }
-
-        if (optget(opts, "OfficialDatabaseOnly")->enabled) {
-            dboptions |= CL_DB_OFFICIAL_ONLY;
-            logg("#Only loading official signatures.\n");
-        }
-
-        /* set the temporary dir */
-        if ((opt = optget(opts, "TemporaryDirectory"))->enabled) {
-            if ((ret = cl_engine_set_str(engine, CL_ENGINE_TMPDIR, opt->strarg))) {
-                logg("!cli_engine_set_str(CL_ENGINE_TMPDIR) failed: %s\n", cl_strerror(ret));
+                logg("!ExcludePUA and IncludePUA cannot be used at the same time\n");
                 ret = 1;
-                break;
+                goto done;
             }
+
+            dboptions |= CL_DB_PUA_INCLUDE;
+            i = 0;
+            logg("#Included PUA categories:");
+            while (opt) {
+                CLI_REALLOC(pua_cats, i + strlen(opt->strarg) + 3, ret = 1);
+
+                logg("# %s", opt->strarg);
+
+                sprintf(pua_cats + i, ".%s", opt->strarg);
+                i += strlen(opt->strarg) + 1;
+                pua_cats[i] = 0;
+                opt         = opt->nextarg;
+            }
+
+            logg("#\n");
+            pua_cats[i]     = '.';
+            pua_cats[i + 1] = 0;
         }
 
-        cl_engine_set_clcb_hash(engine, hash_callback);
-
-        cl_engine_set_clcb_virus_found(engine, clamd_virus_found_cb);
-
-        if (optget(opts, "LeaveTemporaryFiles")->enabled)
-            cl_engine_set_num(engine, CL_ENGINE_KEEPTMP, 1);
-
-        if (optget(opts, "ForceToDisk")->enabled)
-            cl_engine_set_num(engine, CL_ENGINE_FORCETODISK, 1);
-
-        if (optget(opts, "PhishingSignatures")->enabled)
-            dboptions |= CL_DB_PHISHING;
-        else
-            logg("#Not loading phishing signatures.\n");
-
-        if (optget(opts, "Bytecode")->enabled) {
-            dboptions |= CL_DB_BYTECODE;
-            if ((opt = optget(opts, "BytecodeSecurity"))->enabled) {
-                enum bytecode_security s;
-
-                if (!strcmp(opt->strarg, "TrustSigned")) {
-                    s = CL_BYTECODE_TRUST_SIGNED;
-                    logg("#Bytecode: Security mode set to \"TrustSigned\".\n");
-                } else if (!strcmp(opt->strarg, "Paranoid")) {
-                    s = CL_BYTECODE_TRUST_NOTHING;
-                    logg("#Bytecode: Security mode set to \"Paranoid\".\n");
-                } else {
-                    logg("!Unable to parse bytecode security setting:%s\n",
-                         opt->strarg);
-                    ret = 1;
-                    break;
-                }
-
-                if ((ret = cl_engine_set_num(engine, CL_ENGINE_BYTECODE_SECURITY, s))) {
-                    logg("^Invalid bytecode security setting %s: %s\n", opt->strarg, cl_strerror(ret));
-                    ret = 1;
-                    break;
-                }
+        if (pua_cats) {
+            if ((ret = cl_engine_set_str(engine, CL_ENGINE_PUA_CATEGORIES, pua_cats))) {
+                logg("!cli_engine_set_str(CL_ENGINE_PUA_CATEGORIES) failed: %s\n", cl_strerror(ret));
+                ret = 1;
+                goto done;
             }
-            if ((opt = optget(opts, "BytecodeUnsigned"))->enabled) {
-                dboptions |= CL_DB_BYTECODE_UNSIGNED;
-                logg("#Bytecode: Enabled support for unsigned bytecode.\n");
+            FREE(pua_cats);
+        }
+    } else {
+        logg("#Not loading PUA signatures.\n");
+    }
+
+    if (optget(opts, "OfficialDatabaseOnly")->enabled) {
+        dboptions |= CL_DB_OFFICIAL_ONLY;
+        logg("#Only loading official signatures.\n");
+    }
+
+    /* set the temporary dir */
+    if ((opt = optget(opts, "TemporaryDirectory"))->enabled) {
+        if ((ret = cl_engine_set_str(engine, CL_ENGINE_TMPDIR, opt->strarg))) {
+            logg("!cli_engine_set_str(CL_ENGINE_TMPDIR) failed: %s\n", cl_strerror(ret));
+            ret = 1;
+            goto done;
+        }
+    }
+
+    cl_engine_set_clcb_hash(engine, hash_callback);
+
+    cl_engine_set_clcb_virus_found(engine, clamd_virus_found_cb);
+
+    if (optget(opts, "LeaveTemporaryFiles")->enabled)
+        cl_engine_set_num(engine, CL_ENGINE_KEEPTMP, 1);
+
+    if (optget(opts, "ForceToDisk")->enabled)
+        cl_engine_set_num(engine, CL_ENGINE_FORCETODISK, 1);
+
+    if (optget(opts, "PhishingSignatures")->enabled)
+        dboptions |= CL_DB_PHISHING;
+    else
+        logg("#Not loading phishing signatures.\n");
+
+    if (optget(opts, "Bytecode")->enabled) {
+        dboptions |= CL_DB_BYTECODE;
+        if ((opt = optget(opts, "BytecodeSecurity"))->enabled) {
+            enum bytecode_security s;
+
+            if (!strcmp(opt->strarg, "TrustSigned")) {
+                s = CL_BYTECODE_TRUST_SIGNED;
+                logg("#Bytecode: Security mode set to \"TrustSigned\".\n");
+            } else if (!strcmp(opt->strarg, "Paranoid")) {
+                s = CL_BYTECODE_TRUST_NOTHING;
+                logg("#Bytecode: Security mode set to \"Paranoid\".\n");
+            } else {
+                logg("!Unable to parse bytecode security setting:%s\n",
+                     opt->strarg);
+                ret = 1;
+                goto done;
             }
 
-            if ((opt = optget(opts, "BytecodeMode"))->enabled) {
-                enum bytecode_mode mode;
-
-                if (!strcmp(opt->strarg, "ForceJIT"))
-                    mode = CL_BYTECODE_MODE_JIT;
-                else if (!strcmp(opt->strarg, "ForceInterpreter"))
-                    mode = CL_BYTECODE_MODE_INTERPRETER;
-                else if (!strcmp(opt->strarg, "Test"))
-                    mode = CL_BYTECODE_MODE_TEST;
-                else
-                    mode = CL_BYTECODE_MODE_AUTO;
-                cl_engine_set_num(engine, CL_ENGINE_BYTECODE_MODE, mode);
+            if ((ret = cl_engine_set_num(engine, CL_ENGINE_BYTECODE_SECURITY, s))) {
+                logg("^Invalid bytecode security setting %s: %s\n", opt->strarg, cl_strerror(ret));
+                ret = 1;
+                goto done;
             }
-
-            if ((opt = optget(opts, "BytecodeTimeout"))->enabled) {
-                cl_engine_set_num(engine, CL_ENGINE_BYTECODE_TIMEOUT, opt->numarg);
-            }
-        } else {
-            logg("#Bytecode support disabled.\n");
+        }
+        if ((opt = optget(opts, "BytecodeUnsigned"))->enabled) {
+            dboptions |= CL_DB_BYTECODE_UNSIGNED;
+            logg("#Bytecode: Enabled support for unsigned bytecode.\n");
         }
 
-        if (optget(opts, "PhishingScanURLs")->enabled)
-            dboptions |= CL_DB_PHISHING_URLS;
-        else
-            logg("#Disabling URL based phishing detection.\n");
+        if ((opt = optget(opts, "BytecodeMode"))->enabled) {
+            enum bytecode_mode mode;
 
-        if (optget(opts, "DevACOnly")->enabled) {
-            logg("#Only using the A-C matcher.\n");
-            cl_engine_set_num(engine, CL_ENGINE_AC_ONLY, 1);
+            if (!strcmp(opt->strarg, "ForceJIT"))
+                mode = CL_BYTECODE_MODE_JIT;
+            else if (!strcmp(opt->strarg, "ForceInterpreter"))
+                mode = CL_BYTECODE_MODE_INTERPRETER;
+            else if (!strcmp(opt->strarg, "Test"))
+                mode = CL_BYTECODE_MODE_TEST;
+            else
+                mode = CL_BYTECODE_MODE_AUTO;
+            cl_engine_set_num(engine, CL_ENGINE_BYTECODE_MODE, mode);
         }
 
-        if ((opt = optget(opts, "DevACDepth"))->enabled) {
-            cl_engine_set_num(engine, CL_ENGINE_AC_MAXDEPTH, opt->numarg);
-            logg("#Max A-C depth set to %u\n", (unsigned int)opt->numarg);
+        if ((opt = optget(opts, "BytecodeTimeout"))->enabled) {
+            cl_engine_set_num(engine, CL_ENGINE_BYTECODE_TIMEOUT, opt->numarg);
         }
+    } else {
+        logg("#Bytecode support disabled.\n");
+    }
+
+    if (optget(opts, "PhishingScanURLs")->enabled)
+        dboptions |= CL_DB_PHISHING_URLS;
+    else
+        logg("#Disabling URL based phishing detection.\n");
+
+    if (optget(opts, "DevACOnly")->enabled) {
+        logg("#Only using the A-C matcher.\n");
+        cl_engine_set_num(engine, CL_ENGINE_AC_ONLY, 1);
+    }
+
+    if ((opt = optget(opts, "DevACDepth"))->enabled) {
+        cl_engine_set_num(engine, CL_ENGINE_AC_MAXDEPTH, opt->numarg);
+        logg("#Max A-C depth set to %u\n", (unsigned int)opt->numarg);
+    }
 
 #ifdef _WIN32
-        if (optget(opts, "daemon")->enabled) {
-            cl_engine_set_clcb_sigload(engine, svc_checkpoint, NULL);
-            svc_register("clamd");
-        }
+    if (optget(opts, "daemon")->enabled) {
+        cl_engine_set_clcb_sigload(engine, svc_checkpoint, NULL);
+        svc_register("clamd");
+    }
 #endif
 
-        if ((ret = cl_load(dbdir, engine, &sigs, dboptions))) {
-            logg("!%s\n", cl_strerror(ret));
-            ret = 1;
-            break;
+    if ((ret = cl_load(dbdir, engine, &sigs, dboptions))) {
+        logg("!%s\n", cl_strerror(ret));
+        ret = 1;
+        goto done;
+    }
+
+    if ((ret = statinidir(dbdir))) {
+        logg("!%s\n", cl_strerror(ret));
+        ret = 1;
+        goto done;
+    }
+
+    if (optget(opts, "DisableCertCheck")->enabled)
+        cl_engine_set_num(engine, CL_ENGINE_DISABLE_PE_CERTS, 1);
+
+    logg("#Loaded %u signatures.\n", sigs);
+
+    /* pcre engine limits - required for cl_engine_compile */
+    if ((opt = optget(opts, "PCREMatchLimit"))->active) {
+        if ((ret = cl_engine_set_num(engine, CL_ENGINE_PCRE_MATCH_LIMIT, opt->numarg))) {
+            logg("!cli_engine_set_num(PCREMatchLimit) failed: %s\n", cl_strerror(ret));
+            goto done;
         }
+    }
 
-        if ((ret = statinidir(dbdir))) {
-            logg("!%s\n", cl_strerror(ret));
-            ret = 1;
-            break;
+    if ((opt = optget(opts, "PCRERecMatchLimit"))->active) {
+        if ((ret = cl_engine_set_num(engine, CL_ENGINE_PCRE_RECMATCH_LIMIT, opt->numarg))) {
+            logg("!cli_engine_set_num(PCRERecMatchLimit) failed: %s\n", cl_strerror(ret));
+            goto done;
         }
+    }
 
-        if (optget(opts, "DisableCertCheck")->enabled)
-            cl_engine_set_num(engine, CL_ENGINE_DISABLE_PE_CERTS, 1);
+    if ((ret = cl_engine_compile(engine)) != 0) {
+        logg("!Database initialization error: %s\n", cl_strerror(ret));
+        ret = 1;
+        goto done;
+    }
 
-        logg("#Loaded %u signatures.\n", sigs);
+    if (tcpsock || num_fd > 0) {
+        opt = optget(opts, "TCPAddr");
+        if (opt->enabled) {
+            while (opt && opt->strarg) {
+                char *ipaddr = (!strcmp(opt->strarg, "all") ? NULL : opt->strarg);
 
-        /* pcre engine limits - required for cl_engine_compile */
-        if ((opt = optget(opts, "PCREMatchLimit"))->active) {
-            if ((ret = cl_engine_set_num(engine, CL_ENGINE_PCRE_MATCH_LIMIT, opt->numarg))) {
-                logg("!cli_engine_set_num(PCREMatchLimit) failed: %s\n", cl_strerror(ret));
-                cl_engine_free(engine);
-                return 1;
-            }
-        }
-
-        if ((opt = optget(opts, "PCRERecMatchLimit"))->active) {
-            if ((ret = cl_engine_set_num(engine, CL_ENGINE_PCRE_RECMATCH_LIMIT, opt->numarg))) {
-                logg("!cli_engine_set_num(PCRERecMatchLimit) failed: %s\n", cl_strerror(ret));
-                cl_engine_free(engine);
-                return 1;
-            }
-        }
-
-        if ((ret = cl_engine_compile(engine)) != 0) {
-            logg("!Database initialization error: %s\n", cl_strerror(ret));
-            ret = 1;
-            break;
-        }
-
-        if (tcpsock || num_fd > 0) {
-            opt = optget(opts, "TCPAddr");
-            if (opt->enabled) {
-                int breakout = 0;
-
-                while (opt && opt->strarg) {
-                    char *ipaddr = (!strcmp(opt->strarg, "all") ? NULL : opt->strarg);
-
-                    if (tcpserver(&lsockets, &nlsockets, ipaddr, opts) == -1) {
-                        ret      = 1;
-                        breakout = 1;
-                        break;
-                    }
-
-                    opt = opt->nextarg;
-                }
-
-                if (breakout)
-                    break;
-            } else {
-                if (tcpserver(&lsockets, &nlsockets, NULL, opts) == -1) {
+                if (tcpserver(&lsockets, &nlsockets, ipaddr, opts) == -1) {
                     ret = 1;
-                    break;
+                    goto done;
                 }
+
+                opt = opt->nextarg;
+            }
+
+        } else {
+            if (tcpserver(&lsockets, &nlsockets, NULL, opts) == -1) {
+                ret = 1;
+                goto done;
             }
         }
+    }
 #ifndef _WIN32
-        if (localsock && num_fd == 0) {
-            int *t;
-            mode_t sock_mode, umsk = umask(0777); /* socket is created with 000 to avoid races */
+    if (localsock && num_fd == 0) {
+        int *t;
+        mode_t sock_mode, umsk = umask(0777); /* socket is created with 000 to avoid races */
 
-            t = realloc(lsockets, sizeof(int) * (nlsockets + 1));
-            if (!(t)) {
-                ret = 1;
-                break;
-            }
-            lsockets = t;
+        t = realloc(lsockets, sizeof(int) * (nlsockets + 1));
+        if (!(t)) {
+            ret = 1;
+            goto done;
+        }
+        lsockets = t;
 
-            if ((lsockets[nlsockets] = localserver(opts)) == -1) {
-                ret = 1;
-                umask(umsk);
-                break;
-            }
-            umask(umsk); /* restore umask */
+        if ((lsockets[nlsockets] = localserver(opts)) == -1) {
+            ret = 1;
+            umask(umsk);
+            goto done;
+        }
+        umask(umsk); /* restore umask */
 
-            if (optget(opts, "LocalSocketGroup")->enabled) {
-                char *gname    = optget(opts, "LocalSocketGroup")->strarg, *end;
-                gid_t sock_gid = strtol(gname, &end, 10);
+        if (optget(opts, "LocalSocketGroup")->enabled) {
+            char *gname    = optget(opts, "LocalSocketGroup")->strarg, *end;
+            gid_t sock_gid = strtol(gname, &end, 10);
 
-                if (*end) {
-                    struct group *pgrp = getgrnam(gname);
+            if (*end) {
+                struct group *pgrp = getgrnam(gname);
 
-                    if (!pgrp) {
-                        logg("!Unknown group %s\n", gname);
-                        ret = 1;
-                        break;
-                    }
-
-                    sock_gid = pgrp->gr_gid;
-                }
-                if (chown(optget(opts, "LocalSocket")->strarg, -1, sock_gid)) {
-                    logg("!Failed to change socket ownership to group %s\n", gname);
+                if (!pgrp) {
+                    logg("!Unknown group %s\n", gname);
                     ret = 1;
-                    break;
+                    goto done;
                 }
+
+                sock_gid = pgrp->gr_gid;
             }
-            if (optget(opts, "LocalSocketMode")->enabled) {
-                char *end;
-
-                sock_mode = strtol(optget(opts, "LocalSocketMode")->strarg, &end, 8);
-
-                if (*end) {
-                    logg("!Invalid LocalSocketMode %s\n", optget(opts, "LocalSocketMode")->strarg);
-                    ret = 1;
-                    break;
-                }
-            } else {
-                sock_mode = 0777 /* & ~umsk*/; /* conservative default: umask was 0 in clamd < 0.96 */
-            }
-
-            if (chmod(optget(opts, "LocalSocket")->strarg, sock_mode & 0666)) {
-                logg("!Cannot set socket permission for %s to %3o\n", optget(opts, "LocalSocket")->strarg, sock_mode & 0666);
+            if (chown(optget(opts, "LocalSocket")->strarg, -1, sock_gid)) {
+                logg("!Failed to change socket ownership to group %s\n", gname);
                 ret = 1;
-                break;
+                goto done;
             }
+        }
+        if (optget(opts, "LocalSocketMode")->enabled) {
+            char *end;
 
+            sock_mode = strtol(optget(opts, "LocalSocketMode")->strarg, &end, 8);
+
+            if (*end) {
+                logg("!Invalid LocalSocketMode %s\n", optget(opts, "LocalSocketMode")->strarg);
+                ret = 1;
+                goto done;
+            }
+        } else {
+            sock_mode = 0777 /* & ~umsk*/; /* conservative default: umask was 0 in clamd < 0.96 */
+        }
+
+        if (chmod(optget(opts, "LocalSocket")->strarg, sock_mode & 0666)) {
+            logg("!Cannot set socket permission for %s to %3o\n", optget(opts, "LocalSocket")->strarg, sock_mode & 0666);
+            ret = 1;
+            goto done;
+        }
+
+        nlsockets++;
+    }
+
+    /* check for local sockets passed by systemd */
+    if (num_fd > 0) {
+        int *t;
+        t = realloc(lsockets, sizeof(int) * (nlsockets + 1));
+        if (!(t)) {
+            ret = 1;
+            goto done;
+        }
+        lsockets = t;
+
+        lsockets[nlsockets] = localserver(opts);
+        if (lsockets[nlsockets] == -1) {
+            ret = 1;
+            goto done;
+        } else if (lsockets[nlsockets] > 0) {
             nlsockets++;
         }
+    }
 
-        /* check for local sockets passed by systemd */
-        if (num_fd > 0) {
-            int *t;
-            t = realloc(lsockets, sizeof(int) * (nlsockets + 1));
-            if (!(t)) {
-                ret = 1;
-                break;
-            }
-            lsockets = t;
-
-            lsockets[nlsockets] = localserver(opts);
-            if (lsockets[nlsockets] == -1) {
-                ret = 1;
-                break;
-            } else if (lsockets[nlsockets] > 0) {
-                nlsockets++;
+    if (0 == foreground) {
+        if (!debug_mode) {
+            if (chdir("/") == -1) {
+                logg("^Can't change current working directory to root\n");
             }
         }
-
-        if (0 == foreground) {
-            if (!debug_mode) {
-                if (chdir("/") == -1) {
-                    logg("^Can't change current working directory to root\n");
-                }
-            }
 
 #ifndef _WIN32
 
-            /*Since some of the logging is written to stderr, and some of it
-             * is written to a log file, close stdin, stderr, and stdout
-             * now, since everything is initialized.*/
+        /*Since some of the logging is written to stderr, and some of it
+         * is written to a log file, close stdin, stderr, and stdout
+         * now, since everything is initialized.*/
 
-            /*signal the parent process.*/
-            if (parentPid != getpid()) {
-                daemonize_signal_parent(parentPid);
-            }
-#endif
+        /*signal the parent process.*/
+        if (parentPid != getpid()) {
+            daemonize_signal_parent(parentPid);
         }
+#endif
+    }
 
 #elif defined(_WIN32)
-        if (optget(opts, "service-mode")->enabled) {
-            cl_engine_set_clcb_sigload(engine, NULL, NULL);
-            svc_ready();
-        }
+    if (optget(opts, "service-mode")->enabled) {
+        cl_engine_set_clcb_sigload(engine, NULL, NULL);
+        svc_ready();
+    }
 #endif
 
-        if (nlsockets == 0) {
-            logg("!Not listening on any interfaces\n");
-            ret = 1;
-            break;
-        }
+    if (nlsockets == 0) {
+        logg("!Not listening on any interfaces\n");
+        ret = 1;
+        goto done;
+    }
 
-        ret = recvloop(lsockets, nlsockets, engine, dboptions, opts);
+    ret = recvloop(lsockets, nlsockets, engine, dboptions, opts);
 
-    } while (0);
+done:
+
+    // No need to cl_engine_free the engine.
+    // It will be free'd within the recvloop (server-th.c)
 
     if (num_fd == 0) {
         logg("*Closing the main socket%s.\n", (nlsockets > 1) ? "s" : "");
@@ -855,10 +815,15 @@ int main(int argc, char **argv)
 #endif
     }
 
-    free(lsockets);
+    FREE(lsockets);
+
+    FREE(pua_cats);
 
     logg_close();
-    optfree(opts);
+
+    if (NULL != opts) {
+        optfree(opts);
+    }
 
     return ret;
 }

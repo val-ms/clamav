@@ -595,7 +595,7 @@ cl_error_t cli_build_regex_list(struct regex_matcher *matcher)
     }
     cli_dbgmsg("Building regex list\n");
     cli_hashtab_free(&matcher->suffix_hash);
-    if ((rc = cli_ac_buildtrie(&matcher->suffixes)))
+    if ((rc = cli_ac_buildtrie(&matcher->suffixes, -1)))
         return rc;
     matcher->list_built = 1;
     cli_hashset_destroy(&matcher->sha256_pfx_set);

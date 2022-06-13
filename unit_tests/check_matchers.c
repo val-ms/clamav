@@ -221,7 +221,7 @@ START_TEST(test_ac_scanbuff)
         ck_assert_msg(ret == CL_SUCCESS, "cli_add_content_match_pattern failed");
     }
 
-    ret = cli_ac_buildtrie(root);
+    ret = cli_ac_buildtrie(root, -1);
     ck_assert_msg(ret == CL_SUCCESS, "cli_ac_buildtrie() failed");
 
     ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
@@ -264,7 +264,7 @@ START_TEST(test_ac_scanbuff_allscan)
         ck_assert_msg(ret == CL_SUCCESS, "cli_add_content_match_pattern failed");
     }
 
-    ret = cli_ac_buildtrie(root);
+    ret = cli_ac_buildtrie(root, -1);
     ck_assert_msg(ret == CL_SUCCESS, "cli_ac_buildtrie() failed");
 
     ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
@@ -309,7 +309,7 @@ START_TEST(test_ac_scanbuff_ex)
         ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_sigopts_handler() failed");
     }
 
-    ret = cli_ac_buildtrie(root);
+    ret = cli_ac_buildtrie(root, -1);
     ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_ac_buildtrie() failed");
 
     ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
@@ -352,7 +352,7 @@ START_TEST(test_ac_scanbuff_allscan_ex)
         ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_sigopts_handler() failed");
     }
 
-    ret = cli_ac_buildtrie(root);
+    ret = cli_ac_buildtrie(root, -1);
     ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_ac_buildtrie() failed");
 
     ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);

@@ -563,7 +563,44 @@ static int ac_maketrans(struct cli_matcher *root)
     return CL_SUCCESS;
 }
 
-cl_error_t cli_ac_buildtrie(struct cli_matcher *root)
+static void walk_list(unsigned int treeno, struct cli_ac_list *list, unsigned int at, uint8_t *where)
+{
+    struct cli_ac_list *cur;
+    if (!list)
+        return;
+    unsigned int i;
+    printf("%u,", treeno);
+    for (i = 0; i < at; i++)
+        printf("%02x", where[i]);
+    printf(",");
+    for (cur = list; cur; cur = cur->next_same) {
+        printf("%u>%s(", cur->me->partno, cur->me->virname);
+        for (i = 0; i < cur->me->length[0]; i++)
+            printf("%02x", cur->me->pattern[i] & 0xff);
+        printf(")|");
+    }
+    printf("\n");
+    return walk_list(treeno, list->next, at, where);
+}
+
+static void walk_node(unsigned int treeno, struct cli_ac_node *node, unsigned int at, uint8_t *where)
+{
+    unsigned int i;
+    struct cli_ac_list *cur, *cursame;
+
+    if (!node)
+        return;
+
+    if (node->trans) {
+        for (i = 0; i < 256; i++) {
+            where[at] = i;
+            walk_node(treeno, node->trans[i], at + 1, where);
+        }
+    }
+    walk_list(treeno, node->list, at, where);
+}
+
+cl_error_t cli_ac_buildtrie(struct cli_matcher *root, int treeno)
 {
     if (!root)
         return CL_EMALFDB;
@@ -577,6 +614,9 @@ cl_error_t cli_ac_buildtrie(struct cli_matcher *root)
         cli_dbgmsg("Using filter for trie %d\n", root->type);
 
     link_lists(root);
+
+    uint8_t where[256];
+    walk_node(treeno, root->ac_root, 0, where);
 
     return ac_maketrans(root);
 }

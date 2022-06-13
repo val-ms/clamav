@@ -48,6 +48,24 @@
 
 // clang-format off
 
+/**
+ * @brief A list of common pattern prefixes.
+ *
+ * These are patterns that have been found to be so popular that scan speeds suffer
+ * whenever we encounter them.  So instead of putting these into the AC Trie, we'll
+ * try to put them in a prefix that gets backwards-matched after the AC match on
+ * whatever bytes follow these common patterns.
+ */
+#define MAX_COMMON_PATTERN_LEN 4
+static const struct ac_pattern_prefix {
+    uint16_t prefix_length;
+    uint16_t prefix[MAX_COMMON_PATTERN_LEN];
+} common_patterns[] = {
+    { 3, {0x55, 0x8b, 0xec} },
+    { 4, {0x56, 0x42, 0x35, 0x21} },
+    { 0, {0x00} },
+};
+
 #define AC_SPECIAL_ALT_CHAR             1
 #define AC_SPECIAL_ALT_STR_FIXED        2
 #define AC_SPECIAL_ALT_STR              3
@@ -2579,6 +2597,7 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
     struct cli_ac_patt *new;
     char *pt, *pt2, *hex = NULL, *hexcpy = NULL;
     uint16_t i, j, ppos = 0, pend, *dec, nzpos = 0;
+    uint16_t pos_after_common_pattern = 0;
     uint8_t wprefix = 0, zprefix = 1, plen = 0, nzplen = 0;
     struct cli_ac_special *newspecial, **newtable;
     int ret, error = CL_SUCCESS;
@@ -2924,26 +2943,51 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
     }
 
     /*
-     * Check beginning bytes of the pattern up to the max-depth of the AC trie to see if:
-     *  a. it contains a wildcard, or
-     *  b. the bytes are all zeroes.
+     * Check beginning bytes of the pattern to see if the it begins with one of the very popular
+     * pattern prefixes such the PE file function prologue bytes.
      *
      * If it does, we can try to shift the start of the pattern the right, have those beginning
      * bytes be a "prefix" which gets backwards-matched after the AC match.
-     * This happens in the call to ac_backward_match_branch() in ac_forward_match_branch()
+     *
+     * If we can't shift because the pattern is too short, that's okay. We'll just accept it.
      */
-    for (i = 0; i < root->ac_maxdepth && i < new->length[0]; i++) {
-        if (new->pattern[i] & CLI_MATCH_WILDCARD) {
-            wprefix = 1;
+    for (i = 0; common_patterns[i].prefix_length != 0; i++) {
+        if ((new->length[0] > common_patterns[i].prefix_length + root->ac_mindepth) &&
+            (0 == memcmp(new->pattern,
+                         common_patterns[i].prefix,
+                         MIN(new->length[0], common_patterns[i].prefix_length)))) {
+            // Found a common pattern where the pattern is long enough that we may be able to shift the start of the AC-matching pattern right.
+            // Let's save off this suggested shift and try to do that shift when we adjust for wildcards.
+            pos_after_common_pattern = common_patterns[i].prefix_length;
             break;
-        }
-
-        if (zprefix && 0 != new->pattern[i]) {
-            zprefix = 0;
         }
     }
 
-    if (wprefix || zprefix) {
+    if (pos_after_common_pattern == 0) {
+        // Only check for other possible issues wih the beginning bytes if the common pattern check didn't find anything.
+
+        /*
+         * Check beginning bytes of the pattern up to the max-depth of the AC trie to see if:
+         *  a. it contains a wildcard, or
+         *  b. the bytes are all zeroes.
+         *
+         * If it does, we can try to shift the start of the pattern the right, have those beginning
+         * bytes be a "prefix" which gets backwards-matched after the AC match.
+         * This happens in the call to ac_backward_match_branch() in ac_forward_match_branch()
+         */
+        for (i = 0; i < root->ac_maxdepth && i < new->length[0]; i++) {
+            if (new->pattern[i] & CLI_MATCH_WILDCARD) {
+                wprefix = 1;
+                break;
+            }
+
+            if (zprefix && 0 != new->pattern[i]) {
+                zprefix = 0;
+            }
+        }
+    }
+
+    if (wprefix || zprefix || pos_after_common_pattern > 0) {
         /*
          * This pattern has a wildcard in the first few bytes or starts with some zeroes.
          * We'll try to shift the start of the pattern right a bit to find a static subpattern to use for the bytes that go in the A-C trie.
@@ -2954,7 +2998,7 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
         pend = new->length[0] - root->ac_mindepth + 1;
 
         // Search for static bytes to start the pattern in the A-C trie that starts within original min-depth, and of a length up to max-depth.
-        for (i = 0; i < pend; i++) {
+        for (i = pos_after_common_pattern; i < pend; i++) {
             for (j = i; j < i + root->ac_maxdepth && j < new->length[0]; j++) {
                 if (new->pattern[j] & CLI_MATCH_WILDCARD) {
                     // Found a wildcard. Shift the pattern start right a byte, relegating this byte to the "prefix"
@@ -3005,37 +3049,44 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
         }
 
         if (plen < root->ac_mindepth) {
-            cli_errmsg("cli_ac_addsig: Can't find a static subpattern of length %u\n", root->ac_mindepth);
-            mpool_ac_free_special(root->mempool, new);
-            MPOOL_FREE(root->mempool, new->pattern);
-            MPOOL_FREE(root->mempool, new);
-            return CL_EMALFDB;
-        }
-
-        // Store those intial bytes as the pattern "prefix" (the stuff before what goes in the AC Trie)
-        new->prefix = new->pattern;
-        // The "prefix" length is the number of bytes before the starting position of the pattern that goes in the AC Trie.
-        new->prefix_length[0] = ppos;
-        for (i = 0, j = 0; i < new->prefix_length[0]; i++) {
-            if ((new->prefix[i] & CLI_MATCH_WILDCARD) == CLI_MATCH_SPECIAL)
-                new->special_pattern++;
-
-            if ((new->prefix[i] & CLI_MATCH_METADATA) == CLI_MATCH_SPECIAL) {
-                new->prefix_length[1] += new->special_table[j]->len[0];
-                new->prefix_length[2] += new->special_table[j]->len[1];
-                j++;
+            if (pos_after_common_pattern > 0) {
+                // A static prefix could not be found following the common prefix.
+                // We will have to insert the pattern into the AC Trie as is, starting with the common pattern starting bytes.
             } else {
-                new->prefix_length[1]++;
-                new->prefix_length[2]++;
+                // The given pattern does not have enough consecutive static bytes to insert in the AC trie.
+                cli_errmsg("cli_ac_addsig: Can't find a static subpattern of length %u\n", root->ac_mindepth);
+                mpool_ac_free_special(root->mempool, new);
+                MPOOL_FREE(root->mempool, new->pattern);
+                MPOOL_FREE(root->mempool, new);
+                return CL_EMALFDB;
             }
-        }
+        } else {
 
-        // Update the pattern to start at the shifted position with the static bytes.
-        new->pattern = &new->prefix[ppos];
-        // And update the pattern length to remove the prefix bytes.
-        new->length[0] -= new->prefix_length[0];
-        new->length[1] -= new->prefix_length[1];
-        new->length[2] -= new->prefix_length[2];
+            // Store those intial bytes as the pattern "prefix" (the stuff before what goes in the AC Trie)
+            new->prefix = new->pattern;
+            // The "prefix" length is the number of bytes before the starting position of the pattern that goes in the AC Trie.
+            new->prefix_length[0] = ppos;
+            for (i = 0, j = 0; i < new->prefix_length[0]; i++) {
+                if ((new->prefix[i] & CLI_MATCH_WILDCARD) == CLI_MATCH_SPECIAL)
+                    new->special_pattern++;
+
+                if ((new->prefix[i] & CLI_MATCH_METADATA) == CLI_MATCH_SPECIAL) {
+                    new->prefix_length[1] += new->special_table[j]->len[0];
+                    new->prefix_length[2] += new->special_table[j]->len[1];
+                    j++;
+                } else {
+                    new->prefix_length[1]++;
+                    new->prefix_length[2]++;
+                }
+            }
+
+            // Update the pattern to start at the shifted position with the static bytes.
+            new->pattern = &new->prefix[ppos];
+            // And update the pattern length to remove the prefix bytes.
+            new->length[0] -= new->prefix_length[0];
+            new->length[1] -= new->prefix_length[1];
+            new->length[2] -= new->prefix_length[2];
+        }
     }
 
     if (new->length[2] + new->prefix_length[2] > root->maxpatlen) {

@@ -1856,7 +1856,7 @@ static cl_error_t hwp3_cb(void *cbdata, int fd, const char *filepath, cli_ctx *c
     while (!last && ((ret = parsehwp3_infoblk_1(ctx, map, &offset, &last)) == CL_SUCCESS)) continue;
 
     /* scan the uncompressed stream - both compressed and uncompressed cases [ALLMATCH] */
-    if ((ret == CL_SUCCESS) || ((SCAN_ALLMATCHES) && (ret == CL_VIRUS))) {
+    if (ret == CL_SUCCESS) {
         cl_error_t subret = ret;
         size_t dlen       = offset - start;
 

@@ -104,8 +104,7 @@ cl_error_t cli_scancpio_old(cli_ctx *ctx)
     unsigned int file = 0, trailer = 0;
     uint32_t filesize, namesize, hdr_namesize;
     int conv;
-    size_t pos      = 0;
-    int virus_found = 0;
+    size_t pos = 0;
 
     memset(name, 0, sizeof(name));
 

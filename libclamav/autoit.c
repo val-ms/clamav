@@ -642,7 +642,8 @@ static cl_error_t ea05(cli_ctx *ctx, const uint8_t *base, char *tmpd)
 {
     cl_error_t status = CL_SUCCESS;
     cl_error_t ret;
-    uint8_t b[300], comp;
+    uint8_t b[300];
+    uint8_t comp;
     uint32_t s, m4sum = 0;
     int i;
     unsigned int files  = 0;
@@ -658,7 +659,8 @@ static cl_error_t ea05(cli_ctx *ctx, const uint8_t *base, char *tmpd)
     for (i = 0; i < 16; i++)
         m4sum += *base++;
 
-    while (CL_SUCCESS == (ret = cli_checklimits("autoit", ctx, 0, 0, 0))) {
+    // While we have not exceeded the max files limit or the max time limit...
+    while (CL_SUCCESS == (status = cli_checklimits("autoit", ctx, 0, 0, 0))) {
         if (!fmap_need_ptr_once(map, base, 8)) {
             goto done;
         }
@@ -891,8 +893,9 @@ static cl_error_t ea05(cli_ctx *ctx, const uint8_t *base, char *tmpd)
             goto done;
         }
 
-        if (CL_VIRUS == cli_magic_scan_desc(tempfd, tempfile, ctx, NULL)) {
-            status = CL_VIRUS;
+        ret = cli_magic_scan_desc(tempfd, tempfile, ctx, NULL);
+        if (CL_SUCCESS != ret) {
+            status = ret;
             goto done;
         }
     }
@@ -1004,9 +1007,10 @@ static void LAME_decrypt(uint8_t *cypher, uint32_t size, uint16_t seed)
 
 static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
 {
-    uint8_t b[600], comp, script, *buf;
+    cl_error_t ret;
+    uint8_t b[600], comp, *buf;
     uint32_t s;
-    int i, ret, det = 0;
+    int i;
     unsigned int files = 0;
     char tempfile[1024];
     const char prefixes[] = {'\0', '\0', '@', '$', '\0', '.', '"', '\0'};
@@ -1021,60 +1025,81 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
     /*   buf+=0x10; */
     base += 16; /* for now we just skip the garbage */
 
-    while ((ret = cli_checklimits("cli_autoit", ctx, 0, 0, 0)) == CL_CLEAN) {
-        if (!fmap_need_ptr_once(map, base, 8))
-            return (det ? CL_VIRUS : CL_CLEAN);
+    while (CL_SUCCESS == (ret = cli_checklimits("cli_autoit", ctx, 0, 0, 0))) {
+        bool script = false;
+
+        if (!fmap_need_ptr_once(map, base, 8)) {
+            return CL_SUCCESS;
+        }
+
         /*     LAME_decrypt(buf, 4, 0x18ee); waste of time */
         if (cli_readint32(base) != 0x52ca436b) {
             cli_dbgmsg("autoit: no FILE magic found, giving up (got 0x%08x)\n", cli_readint32(base));
-            return (det ? CL_VIRUS : CL_CLEAN);
+            return CL_SUCCESS;
         }
 
-        script = 0;
-
         s = cli_readint32(base + 4) ^ 0xadbc;
-        if ((int32_t)(s * 2) < 0)
-            return (det ? CL_VIRUS : CL_CLEAN); /* the original code wouldn't seek back here */
+        if ((int32_t)(s * 2) < 0) {
+            return CL_SUCCESS; /* the original code wouldn't seek back here */
+        }
+
         base += 8;
+
         if (s < sizeof(b) / 2) {
-            if (!fmap_need_ptr_once(map, base, s * 2))
-                return (det ? CL_VIRUS : CL_CLEAN);
+            if (!fmap_need_ptr_once(map, base, s * 2)) {
+                return CL_SUCCESS;
+            }
+
             memcpy(b, base, s * 2);
             LAME_decrypt(b, s * 2, s + 0xb33f);
             u2a(b, s * 2);
             cli_dbgmsg("autoit: magic string '%s'\n", b);
-            if (s == 19 && !memcmp(">>>AUTOIT SCRIPT<<<", b, 19))
-                script = 1;
+
+            if (s == 19 && !memcmp(">>>AUTOIT SCRIPT<<<", b, 19)) {
+                script = true;
+            }
         } else {
             cli_dbgmsg("autoit: magic string too long to print\n");
         }
+
         base += s * 2;
 
-        if (!fmap_need_ptr_once(map, base, 4))
-            return (det ? CL_VIRUS : CL_CLEAN);
+        if (!fmap_need_ptr_once(map, base, 4)) {
+            return CL_SUCCESS;
+        }
+
         s = cli_readint32(base) ^ 0xf820;
-        if ((int32_t)(s * 2) < 0)
-            return (det ? CL_VIRUS : CL_CLEAN); /* the original code wouldn't seek back here */
+        if ((int32_t)(s * 2) < 0) {
+            return CL_SUCCESS; /* the original code wouldn't seek back here */
+        }
+
         base += 4;
+
         if (cli_debug_flag && s < sizeof(b) / 2) {
-            if (!fmap_need_ptr_once(map, base, s * 2))
-                return (det ? CL_VIRUS : CL_CLEAN);
+            if (!fmap_need_ptr_once(map, base, s * 2)) {
+                return CL_SUCCESS;
+            }
+
             memcpy(b, base, s * 2);
             LAME_decrypt(b, s * 2, s + 0xf479);
             b[s * 2]     = '\0';
             b[s * 2 + 1] = '\0';
             u2a(b, s * 2);
+
             cli_dbgmsg("autoit: original filename '%s'\n", b);
         }
+
         base += s * 2;
 
-        if (!fmap_need_ptr_once(map, base, 13))
-            return (det ? CL_VIRUS : CL_CLEAN);
+        if (!fmap_need_ptr_once(map, base, 13)) {
+            return CL_SUCCESS;
+        }
+
         comp      = *base;
         UNP.csize = cli_readint32(base + 1) ^ 0x87bc;
         if ((int32_t)UNP.csize < 0) {
             cli_dbgmsg("autoit: bad file size - giving up\n");
-            return (det ? CL_VIRUS : CL_CLEAN);
+            return CL_SUCCESS;
         }
 
         if (!UNP.csize) {
@@ -1082,6 +1107,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
             base += 13 + 16;
             continue;
         }
+
         cli_dbgmsg("autoit: compressed size: %x\n", UNP.csize);
         cli_dbgmsg("autoit: advertised uncompressed size %x\n", cli_readint32(base + 5) ^ 0x87bc);
         cli_dbgmsg("autoit: ref chksum: %x\n", cli_readint32(base + 9) ^ 0xa685);
@@ -1100,35 +1126,44 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
 
         files++;
 
-        if (!(UNP.inputbuf = cli_malloc(UNP.csize)))
+        if (!(UNP.inputbuf = cli_malloc(UNP.csize))) {
             return CL_EMEM;
+        }
+
         if (!fmap_need_ptr_once(map, base, UNP.csize)) {
             cli_dbgmsg("autoit: failed to read compressed stream. broken/truncated file?\n");
             free(UNP.inputbuf);
-            return (det ? CL_VIRUS : CL_CLEAN);
+            return CL_SUCCESS;
         }
+
         memcpy(UNP.inputbuf, base, UNP.csize);
         base += UNP.csize;
+
         LAME_decrypt(UNP.inputbuf, UNP.csize, 0x2477 /* + m4sum (broken by design) */);
 
         if (comp == 1) {
             cli_dbgmsg("autoit: file is compressed\n");
+
             if (cli_readint32(UNP.inputbuf) != 0x36304145) {
                 cli_dbgmsg("autoit: bad magic or unsupported version\n");
                 free(UNP.inputbuf);
                 continue;
             }
 
-            if (!(UNP.usize = be32_to_host(*(uint32_t *)(UNP.inputbuf + 4))))
+            if (!(UNP.usize = be32_to_host(*(uint32_t *)(UNP.inputbuf + 4)))) {
                 UNP.usize = UNP.csize; /* only a specifically crafted or badly corrupted sample should land here */
+            }
+
             if (cli_checklimits("autoit", ctx, UNP.usize, 0, 0) != CL_CLEAN) {
                 free(UNP.inputbuf);
                 continue;
             }
+
             if (!(UNP.outputbuf = cli_malloc(UNP.usize))) {
                 free(UNP.inputbuf);
                 return CL_EMEM;
             }
+
             cli_dbgmsg("autoit: uncompressed size again: %x\n", UNP.usize);
 
             UNP.cur_output  = 0;
@@ -1171,6 +1206,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                         UNP.error = 1;
                         break;
                     }
+
                     while (bs--) {
                         UNP.outputbuf[UNP.cur_output] = UNP.outputbuf[UNP.cur_output - bb];
                         UNP.cur_output++;
@@ -1206,10 +1242,12 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                 free(UNP.outputbuf);
                 return CL_EMEM;
             }
+
             UNP.cur_output = 0;
             UNP.cur_input  = 4;
             UNP.bits_avail = cli_readint32((char *)UNP.outputbuf);
             UNP.error      = 0;
+
             cli_dbgmsg("autoit: script has got %u lines\n", UNP.bits_avail);
 
             while (!UNP.error && UNP.bits_avail && UNP.cur_input < UNP.usize) {
@@ -1224,13 +1262,16 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             cli_dbgmsg("autoit: too few bytes present - expected enough for a keyword ID\n");
                             break;
                         }
+
                         keyword_id = cli_readint32((char *)&UNP.outputbuf[UNP.cur_input]);
                         if (keyword_id >= (sizeof(autoit_keywords) / sizeof(autoit_keywords[0]))) {
                             UNP.error = 1;
                             cli_dbgmsg("autoit: unknown AutoIT keyword ID: 0x%x\n", keyword_id);
                             break;
                         }
+
                         UNP.cur_input += 4;
+
                         keyword_len = strlen(autoit_keywords[keyword_id]);
                         if (UNP.cur_output + keyword_len + 2 >= UNP.csize) {
                             uint8_t *newout;
@@ -1241,11 +1282,13 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             }
                             buf = newout;
                         }
+
                         if (cli_debug_flag) {
                             if (0 == memcmp(autoit_keywords[keyword_id], "UNKNOWN", MIN(strlen("UNKNOWN"), keyword_len))) {
                                 cli_dbgmsg("autoit: encountered use of unknown keyword ID: %s\n", autoit_keywords[keyword_id]);
                             }
                         }
+
                         snprintf((char *)&buf[UNP.cur_output], keyword_len + 2, "%s ", autoit_keywords[keyword_id]);
                         UNP.cur_output += keyword_len + 1;
                         break;
@@ -1258,13 +1301,16 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             cli_dbgmsg("autoit: too few bytes present - expected enough for a function ID\n");
                             break;
                         }
+
                         function_id = cli_readint32((char *)&UNP.outputbuf[UNP.cur_input]);
                         if (function_id >= (sizeof(autoit_functions) / sizeof(autoit_functions[0]))) {
                             UNP.error = 1;
                             cli_dbgmsg("autoit: unknown AutoIT function ID: 0x%x\n", function_id);
                             break;
                         }
+
                         UNP.cur_input += 4;
+
                         function_len = strlen(autoit_functions[function_id]);
                         if (UNP.cur_output + function_len + 2 >= UNP.csize) {
                             uint8_t *newout;
@@ -1275,11 +1321,13 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             }
                             buf = newout;
                         }
+
                         if (cli_debug_flag) {
                             if (0 == memcmp(autoit_functions[function_id], "UNKNOWN", MIN(strlen("UNKNOWN"), function_len))) {
                                 cli_dbgmsg("autoit: encountered use of unknown function ID: %s\n", autoit_functions[function_id]);
                             }
                         }
+
                         snprintf((char *)&buf[UNP.cur_output], function_len + 2, "%s ", autoit_functions[function_id]);
                         UNP.cur_output += function_len + 1;
                         break;
@@ -1290,6 +1338,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             cli_dbgmsg("autoit: not enough space for an int\n");
                             break;
                         }
+
                         if (UNP.cur_output + 12 >= UNP.csize) {
                             uint8_t *newout;
                             UNP.csize += 512;
@@ -1299,6 +1348,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             }
                             buf = newout;
                         }
+
                         snprintf((char *)&buf[UNP.cur_output], 12, "0x%08x ", cli_readint32((char *)&UNP.outputbuf[UNP.cur_input]));
                         UNP.cur_output += 11;
                         UNP.cur_input += 4;
@@ -1312,6 +1362,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             cli_dbgmsg("autoit: not enough space for an int64\n");
                             break;
                         }
+
                         if (UNP.cur_output + 20 >= UNP.csize) {
                             uint8_t *newout;
                             UNP.csize += 512;
@@ -1321,6 +1372,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             }
                             buf = newout;
                         }
+
                         val = (uint64_t)cli_readint32((char *)&UNP.outputbuf[UNP.cur_input + 4]);
                         val <<= 32;
                         val += (uint64_t)cli_readint32((char *)&UNP.outputbuf[UNP.cur_input]);
@@ -1336,6 +1388,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             cli_dbgmsg("autoit: not enough space for a double\n");
                             break;
                         }
+
                         if (UNP.cur_output + 40 >= UNP.csize) {
                             uint8_t *newout;
                             UNP.csize += 512;
@@ -1345,16 +1398,19 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             }
                             buf = newout;
                         }
-                        if (fpu_words == FPU_ENDIAN_LITTLE)
+
+                        if (fpu_words == FPU_ENDIAN_LITTLE) {
                             snprintf((char *)&buf[UNP.cur_output], 39, "%g ", *(double *)&UNP.outputbuf[UNP.cur_input]);
-                        else
+                        } else
                             do {
                                 double x;
                                 uint8_t *j = (uint8_t *)&x;
                                 unsigned int i;
 
-                                for (i = 0; i < 8; i++)
+                                for (i = 0; i < 8; i++) {
                                     j[7 - i] = UNP.outputbuf[UNP.cur_input + i];
+                                }
+
                                 snprintf((char *)&buf[UNP.cur_output], 39, "%g ", x); /* FIXME: check */
                             } while (0);
                         buf[UNP.cur_output + 38] = ' ';
@@ -1379,6 +1435,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             cli_dbgmsg("autoit: not enough space for size\n");
                             break;
                         }
+
                         chars  = cli_readint32((char *)&UNP.outputbuf[UNP.cur_input]);
                         dchars = chars * 2;
                         UNP.cur_input += 4;
@@ -1388,6 +1445,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             cli_dbgmsg("autoit: size too big - needed %d, total %d, avail %d\n", dchars, UNP.usize, UNP.usize - UNP.cur_input);
                             break;
                         }
+
                         if (UNP.cur_output + chars + 3 >= UNP.csize) {
                             uint8_t *newout;
                             UNP.csize += chars + 512;
@@ -1398,8 +1456,9 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             buf = newout;
                         }
 
-                        if (prefixes[op - 0x30])
+                        if (prefixes[op - 0x30]) {
                             buf[UNP.cur_output++] = prefixes[op - 0x30];
+                        }
 
                         if (chars) {
                             for (i = 0; i < dchars; i += 2) {
@@ -1411,11 +1470,14 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                             UNP.cur_output += chars;
                             UNP.cur_input += dchars;
                         }
-                        if (op == 0x36)
+
+                        if (op == 0x36) {
                             // TODO: Mask possible double quotes inside the string: >Say:"Hi "<  ==> >"Say:""Hi"" "<
                             buf[UNP.cur_output++] = '"';
-                        if (op != 0x34)
+                        }
+                        if (op != 0x34) {
                             buf[UNP.cur_output++] = ' ';
+                        }
                     } break;
 
                     case 0x40: /* , */
@@ -1482,8 +1544,9 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                 }
             }
 
-            if (UNP.error)
+            if (UNP.error) {
                 cli_dbgmsg("autoit: decompilation aborted - partial script may exist\n");
+            }
 
             free(UNP.outputbuf);
         } else {
@@ -1504,17 +1567,23 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
             free(buf);
             return CL_EWRITE;
         }
+
         free(buf);
-        if (ctx->engine->keeptmp)
+
+        if (ctx->engine->keeptmp) {
             cli_dbgmsg("autoit: %s extracted to %s\n", (script) ? "script" : "file", tempfile);
-        else
+        } else {
             cli_dbgmsg("autoit: %s successfully extracted\n", (script) ? "script" : "file");
+        }
+
         if (lseek(i, 0, SEEK_SET) == -1) {
             cli_dbgmsg("autoit: call to lseek() has failed\n");
             close(i);
             return CL_ESEEK;
         }
-        if (cli_magic_scan_desc(i, tempfile, ctx, NULL) == CL_VIRUS) {
+
+        ret = cli_magic_scan_desc(i, tempfile, ctx, NULL);
+        if (CL_SUCCESS != ret) {
             close(i);
             if (!ctx->engine->keeptmp) {
                 if (cli_unlink(tempfile)) {
@@ -1522,13 +1591,17 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
                 }
             }
             return CL_VIRUS;
-            det = 1;
         }
+
         close(i);
-        if (!ctx->engine->keeptmp)
-            if (cli_unlink(tempfile)) return CL_EUNLINK;
+
+        if (!ctx->engine->keeptmp) {
+            if (cli_unlink(tempfile)) {
+                return CL_EUNLINK;
+            }
+        }
     }
-    return (det ? CL_VIRUS : ret);
+    return ret;
 }
 
 /*********************
@@ -1537,7 +1610,7 @@ static int ea06(cli_ctx *ctx, const uint8_t *base, char *tmpd)
 
 cl_error_t cli_scanautoit(cli_ctx *ctx, off_t offset)
 {
-    cl_error_t status;
+    cl_error_t status = CL_SUCCESS;
     const uint8_t *version;
     char *tmpd;
     fmap_t *map = ctx->fmap;

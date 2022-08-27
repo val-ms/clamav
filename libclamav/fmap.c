@@ -1220,7 +1220,21 @@ cl_error_t fmap_get_hash(fmap_t *map, unsigned char **hash, cli_hash_type_t type
 
 complete:
 
-    *hash = map->md5;
+    switch (type) {
+        case CLI_HASH_MD5:
+            *hash = map->md5;
+            break;
+        case CLI_HASH_SHA1:
+            *hash = map->sha1;
+            break;
+        case CLI_HASH_SHA256:
+            *hash = map->sha256;
+            break;
+        default:
+            cli_errmsg("fmap_get_hash: Unsupported hash type %u\n", type);
+            status = CL_EARG;
+            goto done;
+    }
 
     status = CL_SUCCESS;
 

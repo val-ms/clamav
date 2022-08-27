@@ -344,7 +344,7 @@ cl_error_t cli_scancpio_newc(cli_ctx *ctx, int crc)
         }
 
         status = cli_magic_scan_nested_fmap_type(ctx->fmap, pos, filesize, ctx, CL_TYPE_ANY, name);
-        if (status == CL_VIRUS) {
+        if (status != CL_SUCCESS) {
             goto done;
         }
 

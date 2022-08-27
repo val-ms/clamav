@@ -892,11 +892,6 @@ static cl_error_t lsig_eval(cli_ctx *ctx, struct cli_matcher *root, struct cli_a
 
                 (void)cli_recursion_stack_pop(ctx); /* Restore the parent fmap */
 
-                if (CL_VIRUS == status) {
-                    status = CL_VIRUS;
-                    goto done;
-                }
-
                 goto done;
             }
         }

@@ -1857,14 +1857,9 @@ static cl_error_t hwp3_cb(void *cbdata, int fd, const char *filepath, cli_ctx *c
 
     /* scan the uncompressed stream - both compressed and uncompressed cases [ALLMATCH] */
     if (ret == CL_SUCCESS) {
-        cl_error_t subret = ret;
-        size_t dlen       = offset - start;
+        size_t dlen = offset - start;
 
         ret = cli_magic_scan_nested_fmap_type(map, start, dlen, ctx, CL_TYPE_ANY, NULL);
-        // ret = cli_magic_scan_nested_fmap_type(map, 0, 0, ctx, CL_TYPE_ANY);
-
-        if (ret == CL_SUCCESS)
-            ret = subret;
     }
 
     if (dmap)

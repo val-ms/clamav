@@ -845,12 +845,7 @@ int cli_scanxar(cli_ctx *ctx)
 
             rc = cli_magic_scan_desc(fd, tmpname, ctx, NULL); /// TODO: collect file names in xar_get_toc_data_values()
             if (rc != CL_SUCCESS) {
-                if (rc == CL_VIRUS) {
-                    goto exit_tmpfile;
-                } else if (rc != CL_BREAK) {
-                    cli_dbgmsg("cli_scanxar: cli_magic_scan_desc error %i\n", rc);
-                    goto exit_tmpfile;
-                }
+                goto exit_tmpfile;
             }
         }
 

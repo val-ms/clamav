@@ -111,7 +111,6 @@ size_t pdf_decodestream(
 {
     struct pdf_token *token = NULL;
     size_t bytes_scanned    = 0;
-    cli_ctx *ctx            = NULL;
 
     if (!status) {
         /* invalid args, and no way to pass back the status code */
@@ -123,8 +122,6 @@ size_t pdf_decodestream(
         *status = CL_EARG;
         goto done;
     }
-
-    ctx = pdf->ctx;
 
     if (!stream || !streamlen || fout < 0) {
         cli_dbgmsg("pdf_decodestream: no filters or stream on obj %u %u\n", obj->id >> 8, obj->id & 0xff);
@@ -226,7 +223,6 @@ static size_t pdf_decodestream_internal(
 {
     cl_error_t retval    = CL_SUCCESS;
     size_t bytes_scanned = 0;
-    cli_ctx *ctx         = NULL;
     const char *filter   = NULL;
     uint32_t i;
 
@@ -241,7 +237,6 @@ static size_t pdf_decodestream_internal(
         goto done;
     }
 
-    ctx     = pdf->ctx;
     *status = CL_SUCCESS;
 
     /*

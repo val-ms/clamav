@@ -30,6 +30,15 @@
 # Eg:
 # find_package(Rust REQUIRED)
 #
+# Callers may set the following variables to control the behavior:
+# ================================================================
+#
+# `CARGO_HOME` - The directory where Cargo should be found.
+#                If not set, then it will search in ~/.cargo/bin
+#
+# `CARGO_CHANNEL` - May be set to `stable`, `beta`, or `nightly`.
+#                   If not set, then it attempt to use the stable version.
+#
 # This module provides the following functions:
 # =============================================
 #
@@ -87,14 +96,6 @@
 #   set_property(TEST yourlib PROPERTY ENVIRONMENT ${ENVIRONMENT})
 #   ```
 #
-# Experimental: Precompile the Tests Executable
-# ~~~~~~~~~~~~
-# This feature will cause install failures if you `sudo make install` because
-# it will recompile the test executable with sudo and Cargo is likely to fail to
-# run with sudo.
-# This cannot be fixed unless we can predetermine the test exeecutable OUTPUT
-# filepath. See: https://github.com/rust-lang/cargo/issues/1924
-#
 # If your library has unit tests AND your library DOES depend on your C
 # libraries, you can precompile the unit tests application with some extra
 # parameters to `add_rust_test()`:
@@ -140,6 +141,10 @@ if(NOT DEFINED CARGO_HOME)
     else()
         set(CARGO_HOME "$ENV{HOME}/.cargo")
     endif()
+endif()
+
+if(NOT DEFINED CARGO_CHANNEL)
+    set(CARGO_CHANNEL "stable")
 endif()
 
 include(FindPackageHandleStandardArgs)
@@ -335,8 +340,10 @@ function(add_rust_test)
 
     set(MY_CARGO_ARGS "test")
 
-    if(NOT "${CMAKE_OSX_ARCHITECTURES}" MATCHES "^(arm64;x86_64|x86_64;arm64)$") # Don't specify the target for universal, we'll do that manually for each build.
-        list(APPEND MY_CARGO_ARGS "--target" ${RUST_COMPILER_TARGET})
+    if(NOT DEFINED _RUSTUP_TOOLCHAIN_FULL)
+        if(NOT "${CMAKE_OSX_ARCHITECTURES}" MATCHES "^(arm64;x86_64|x86_64;arm64)$") # Don't specify the target for universal, we'll do that manually for each build.
+            list(APPEND MY_CARGO_ARGS "--target" ${RUST_COMPILER_TARGET})
+        endif()
     endif()
 
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
@@ -363,14 +370,138 @@ function(add_rust_test)
 endfunction()
 
 #
+# Find Rustup first.
+# If found, we may use it in combination with the CARGO_CHANNEL option to determine the toolchain and use those toolchain binaries directly.
+#
+find_rust_program(rustup)
+
+if(NOT RUST_COMPILER_TARGET)
+    # Automatically determine the Rust Target Triple.
+    # Note: Users may override automatic target detection by specifying their own. Most likely needed for cross-compiling.
+    # For reference determining target platform: https://doc.rust-lang.org/nightly/rustc/platform-support.html
+    if(WIN32)
+        # For windows x86/x64, it's easy enough to guess the target.
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(RUST_COMPILER_TARGET "x86_64-pc-windows-msvc")
+        else()
+            set(RUST_COMPILER_TARGET "i686-pc-windows-msvc")
+        endif()
+    elseif(CMAKE_SYSTEM_NAME STREQUAL Darwin AND "${CMAKE_OSX_ARCHITECTURES}" MATCHES "^(arm64;x86_64|x86_64;arm64)$")
+        # Special case for Darwin because we may want to build universal binaries.
+        set(RUST_COMPILER_TARGET "universal-apple-darwin")
+    endif()
+endif()
+
+if(DEFINED rustup_EXECUTABLE AND NOT RUST_COMPILER_TARGET STREQUAL "universal-apple-darwin")
+    # Use rustup to identify the path of the real cargo bin directory.
+    # This way we don't use the rustup shims that get confused when run as a different user that doesn't have cargo installed..
+
+    # Much of this logic courtesy of the Corrosion project:
+    # https://github.com/corrosion-rs/corrosion/blob/master/cmake/FindRust.cmake#L86
+    execute_process(
+        COMMAND ${rustup_EXECUTABLE} toolchain list --verbose
+        OUTPUT_VARIABLE _TOOLCHAINS_RAW
+    )
+
+    string(REPLACE "\n" ";" _TOOLCHAINS_RAW "${_TOOLCHAINS_RAW}")
+
+    foreach(_TOOLCHAIN_RAW ${_TOOLCHAINS_RAW})
+        if(_TOOLCHAIN_RAW MATCHES "([a-zA-Z0-9\\._\\-]+)[ \t\r\n]?(\\(default\\) \\(override\\)|\\(default\\)|\\(override\\))?[ \t\r\n]+(.+)")
+            set(_TOOLCHAIN "${CMAKE_MATCH_1}")
+            set(_TOOLCHAIN_TYPE ${CMAKE_MATCH_2})
+            list(APPEND _DISCOVERED_TOOLCHAINS ${_TOOLCHAIN})
+
+            set(${_TOOLCHAIN}_PATH "${CMAKE_MATCH_3}")
+
+            if(_TOOLCHAIN_TYPE MATCHES ".*\\(default\\).*")
+                set(_TOOLCHAIN_DEFAULT ${_TOOLCHAIN})
+            endif()
+
+            if(_TOOLCHAIN_TYPE MATCHES ".*\\(override\\).*")
+                set(_TOOLCHAIN_OVERRIDE ${_TOOLCHAIN})
+            endif()
+        else()
+            message(WARNING "Didn't recognize toolchain: ${_TOOLCHAIN_RAW}")
+        endif()
+    endforeach()
+
+    if(RUST_COMPILER_TARGET)
+        # The caller has requested a specific compiler target.  Try to use it.
+        if("${CARGO_CHANNEL}-${RUST_COMPILER_TARGET}" IN_LIST _DISCOVERED_TOOLCHAINS)
+            set(_TOOLCHAIN_SELECTED ${CARGO_CHANNEL}-${RUST_COMPILER_TARGET})
+        else()
+            message(FATAL_ERROR "RUST_COMPILER_TARGET is set to ${RUST_COMPILER_TARGET}, but no toolchain for that target is installed.  Available toolchains: ${_DISCOVERED_TOOLCHAINS}")
+        endif()
+    else()
+        # Use the default or the override toolchain, if overridden.
+        if(NOT DEFINED Rust_TOOLCHAIN)
+            if(NOT DEFINED _TOOLCHAIN_OVERRIDE)
+                set(_TOOLCHAIN_SELECTED ${_TOOLCHAIN_DEFAULT})
+            else()
+                set(_TOOLCHAIN_SELECTED ${_TOOLCHAIN_OVERRIDE})
+            endif()
+        endif()
+    endif()
+
+    set(Rust_TOOLCHAIN ${_TOOLCHAIN_SELECTED} CACHE STRING "The rustup toolchain to use")
+    message(STATUS "Rust Toolchain: ${Rust_TOOLCHAIN}")
+
+    if(NOT Rust_TOOLCHAIN IN_LIST _DISCOVERED_TOOLCHAINS)
+        # If the precise toolchain wasn't found, try appending the default host
+        execute_process(
+            COMMAND ${Rust_RUSTUP} show
+            OUTPUT_VARIABLE _SHOW_RAW
+        )
+
+        if(_SHOW_RAW MATCHES "Default host: ([a-zA-Z0-9_\\-]*)\n")
+            set(_DEFAULT_HOST "${CMAKE_MATCH_1}")
+        else()
+            message(FATAL_ERROR "Failed to parse \"Default host\" from `${Rust_RUSTUP} show`. Got: ${_SHOW_RAW}")
+        endif()
+
+        if(NOT "${Rust_TOOLCHAIN}-${_DEFAULT_HOST}" IN_LIST _DISCOVERED_TOOLCHAINS)
+            message(NOTICE "Could not find toolchain '${Rust_TOOLCHAIN}'")
+            message(NOTICE "Available toolchains:")
+
+            list(APPEND CMAKE_MESSAGE_INDENT "  ")
+
+            foreach(_TOOLCHAIN ${_DISCOVERED_TOOLCHAINS})
+                message(NOTICE "${_TOOLCHAIN}")
+            endforeach()
+
+            list(POP_BACK CMAKE_MESSAGE_INDENT)
+
+            message(FATAL_ERROR "")
+        endif()
+
+        set(_RUSTUP_TOOLCHAIN_FULL "${Rust_TOOLCHAIN}-${_DEFAULT_HOST}")
+    else()
+        set(_RUSTUP_TOOLCHAIN_FULL "${Rust_TOOLCHAIN}")
+    endif()
+
+    set(CARGO_HOME "${${_RUSTUP_TOOLCHAIN_FULL}_PATH}")
+    message(VERBOSE "Rust toolchain ${_RUSTUP_TOOLCHAIN_FULL}")
+    message(VERBOSE "Rust toolchain path ${CARGO_HOME}")
+endif()
+
+#
 # Cargo is the primary tool for using the Rust Toolchain to to build static
 # libs that can include other crate dependencies.
 #
 find_rust_program(cargo)
 
-# These other programs may also be useful...
+# Rustc will be required to determine the target triple.
 find_rust_program(rustc)
-find_rust_program(rustup)
+
+if(NOT RUST_COMPILER_TARGET)
+    # Determine LLVM target triple.
+    execute_process(COMMAND ${rustc_EXECUTABLE} -vV
+        OUTPUT_VARIABLE RUSTC_VV_OUT ERROR_QUIET)
+    string(REGEX REPLACE "^.*host: ([a-zA-Z0-9_\\-]+).*" "\\1" RUST_COMPILER_TARGET1 "${RUSTC_VV_OUT}")
+    string(STRIP ${RUST_COMPILER_TARGET1} RUST_COMPILER_TARGET)
+endif()
+
+# These other programs may also be useful...
 find_rust_program(rust-gdb)
 find_rust_program(rust-lldb)
 find_rust_program(rustdoc)
@@ -411,36 +542,13 @@ foreach(LINE ${LINE_LIST})
     endif()
 endforeach()
 
-if(NOT RUST_COMPILER_TARGET)
-    # Automatically determine the Rust Target Triple.
-    # Note: Users may override automatic target detection by specifying their own. Most likely needed for cross-compiling.
-    # For reference determining target platform: https://doc.rust-lang.org/nightly/rustc/platform-support.html
-    if(WIN32)
-        # For windows x86/x64, it's easy enough to guess the target.
-        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-            set(RUST_COMPILER_TARGET "x86_64-pc-windows-msvc")
-        else()
-            set(RUST_COMPILER_TARGET "i686-pc-windows-msvc")
-        endif()
-    elseif(CMAKE_SYSTEM_NAME STREQUAL Darwin AND "${CMAKE_OSX_ARCHITECTURES}" MATCHES "^(arm64;x86_64|x86_64;arm64)$")
-        # Special case for Darwin because we may want to build universal binaries.
-        set(RUST_COMPILER_TARGET "universal-apple-darwin")
-    else()
-        # Determine default LLVM target triple.
-        execute_process(COMMAND ${rustc_EXECUTABLE} -vV
-            OUTPUT_VARIABLE RUSTC_VV_OUT ERROR_QUIET)
-        string(REGEX REPLACE "^.*host: ([a-zA-Z0-9_\\-]+).*" "\\1" DEFAULT_RUST_COMPILER_TARGET1 "${RUSTC_VV_OUT}")
-        string(STRIP ${DEFAULT_RUST_COMPILER_TARGET1} DEFAULT_RUST_COMPILER_TARGET)
-
-        set(RUST_COMPILER_TARGET "${DEFAULT_RUST_COMPILER_TARGET}")
-    endif()
-endif()
-
 set(CARGO_ARGS "build")
 
-if(NOT "${RUST_COMPILER_TARGET}" MATCHES "^universal-apple-darwin$")
-    # Don't specify the target for macOS universal builds, we'll do that manually for each build.
-    list(APPEND CARGO_ARGS "--target" ${RUST_COMPILER_TARGET})
+if(NOT DEFINED _RUSTUP_TOOLCHAIN_FULL)
+    if(NOT "${RUST_COMPILER_TARGET}" MATCHES "^universal-apple-darwin$")
+        # Don't specify the target for macOS universal builds, we'll do that manually for each build.
+        list(APPEND CARGO_ARGS "--target" ${RUST_COMPILER_TARGET})
+    endif()
 endif()
 
 set(RUSTFLAGS "")

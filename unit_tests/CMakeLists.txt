@@ -291,7 +291,6 @@ set(ENVIRONMENT
     CK_DEFAULT_TIMEOUT=300
     LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
     DYLD_LIBRARY_PATH=${LD_LIBRARY_PATH}
-    PATH=${NEW_PATH}
     LIBSSL=${LIBSSL}
     LIBCRYPTO=${LIBCRYPTO}
     LIBZ=${LIBZ}
@@ -339,55 +338,57 @@ set(ENVIRONMENT
 
 add_test(NAME libclamav COMMAND ${PythonTest_COMMAND};libclamav_test.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-set_property(TEST libclamav PROPERTY ENVIRONMENT ${ENVIRONMENT})
+set_property(TEST libclamav PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH})
 if(Valgrind_FOUND)
     add_test(NAME libclamav_valgrind COMMAND ${PythonTest_COMMAND};libclamav_test.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    set_property(TEST libclamav_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT} VALGRIND=${Valgrind_EXECUTABLE})
+    set_property(TEST libclamav_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH} VALGRIND=${Valgrind_EXECUTABLE})
 endif()
 
 add_rust_test(NAME libclamav_rust
     SOURCE_DIRECTORY "${CMAKE_SOURCE_DIR}/libclamav_rust"
     BINARY_DIRECTORY "${CMAKE_BINARY_DIR}"
-    PRECOMPILE_TESTS FALSE # Cannot precompile, because `sudo make install` will fail. See notes in FindRust.cmake.
+    PRECOMPILE_TESTS TRUE
+    PRECOMPILE_DEPENDS ClamAV::libclamav
+    PRECOMPILE_ENVIRONMENT ${ENVIRONMENT}
 )
-set_property(TEST libclamav_rust PROPERTY ENVIRONMENT ${ENVIRONMENT})
+set_property(TEST libclamav_rust PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH})
 
 if(ENABLE_APP)
     add_test(NAME clamscan COMMAND ${PythonTest_COMMAND};clamscan_test.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    set_property(TEST clamscan PROPERTY ENVIRONMENT ${ENVIRONMENT})
+    set_property(TEST clamscan PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH})
     if(Valgrind_FOUND)
         add_test(NAME clamscan_valgrind COMMAND ${PythonTest_COMMAND};clamscan_test.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-        set_property(TEST clamscan_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT} VALGRIND=${Valgrind_EXECUTABLE})
+        set_property(TEST clamscan_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH} VALGRIND=${Valgrind_EXECUTABLE})
     endif()
 
     add_test(NAME clamd COMMAND ${PythonTest_COMMAND};clamd_test.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    set_property(TEST clamd PROPERTY ENVIRONMENT ${ENVIRONMENT})
+    set_property(TEST clamd PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH})
     if(Valgrind_FOUND)
         add_test(NAME clamd_valgrind COMMAND ${PythonTest_COMMAND};clamd_test.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-        set_property(TEST clamd_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT} VALGRIND=${Valgrind_EXECUTABLE})
+        set_property(TEST clamd_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH} VALGRIND=${Valgrind_EXECUTABLE})
     endif()
 
     add_test(NAME freshclam COMMAND ${PythonTest_COMMAND};freshclam_test.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    set_property(TEST freshclam PROPERTY ENVIRONMENT ${ENVIRONMENT})
+    set_property(TEST freshclam PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH})
     if(Valgrind_FOUND)
         add_test(NAME freshclam_valgrind COMMAND ${PythonTest_COMMAND};freshclam_test.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-        set_property(TEST freshclam_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT} VALGRIND=${Valgrind_EXECUTABLE})
+        set_property(TEST freshclam_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH} VALGRIND=${Valgrind_EXECUTABLE})
     endif()
 
     add_test(NAME sigtool COMMAND ${PythonTest_COMMAND};sigtool_test.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    set_property(TEST sigtool PROPERTY ENVIRONMENT ${ENVIRONMENT})
+    set_property(TEST sigtool PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH})
     if(Valgrind_FOUND)
         add_test(NAME sigtool_valgrind COMMAND ${PythonTest_COMMAND};sigtool_test.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-        set_property(TEST sigtool_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT} VALGRIND=${Valgrind_EXECUTABLE})
+        set_property(TEST sigtool_valgrind PROPERTY ENVIRONMENT ${ENVIRONMENT};PATH=${NEW_PATH} VALGRIND=${Valgrind_EXECUTABLE})
     endif()
 endif()
 

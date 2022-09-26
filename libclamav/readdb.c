@@ -366,7 +366,7 @@ static cl_error_t readdb_load_regex_subsignature(struct cli_matcher *root, const
         if (subtokens_count == 2) {
             // Offset was specified
             offset = subtokens[0];
-            sig = subtokens[1];
+            sig    = subtokens[1];
         } else {
             sig = subtokens[0];
         }
@@ -3036,15 +3036,15 @@ static int cli_loadmd(FILE *fs, struct cl_engine *engine, unsigned int *signo, i
             ret = CL_EMEM;
             break;
         }
-        new->csize[0] = new->csize[1] = CLI_OFF_ANY;
+        new->csize[0] = new->csize[1] = CLI_SIZE_ANY;
 
         if (!strcmp(tokens[3], "*"))
-            new->fsizer[0] = new->fsizer[1] = CLI_OFF_ANY;
+            new->fsizer[0] = new->fsizer[1] = CLI_SIZE_ANY;
         else
             new->fsizer[0] = new->fsizer[1] = atoi(tokens[3]);
 
         if (!strcmp(tokens[4], "*"))
-            new->fsizec[0] = new->fsizec[1] = CLI_OFF_ANY;
+            new->fsizec[0] = new->fsizec[1] = CLI_SIZE_ANY;
         else
             new->fsizec[0] = new->fsizec[1] = atoi(tokens[4]);
 
@@ -3062,7 +3062,7 @@ static int cli_loadmd(FILE *fs, struct cl_engine *engine, unsigned int *signo, i
 
         /* tokens[6] - not used */
 
-        new->filepos[0] = new->filepos[1] = strcmp(tokens[7], "*") ? (unsigned int)atoi(tokens[7]) : (unsigned int)CLI_OFF_ANY;
+        new->filepos[0] = new->filepos[1] = strcmp(tokens[7], "*") ? (size_t)atoi(tokens[7]) : (size_t)CLI_SIZE_ANY;
 
         /* tokens[8] - not used */
 
@@ -3212,7 +3212,7 @@ static int cli_loadcdb(FILE *fs, struct cl_engine *engine, unsigned int *signo, 
             break;                                                            \
         }                                                                     \
     } else {                                                                  \
-        dest[0] = dest[1] = CLI_OFF_ANY;                                      \
+        dest[0] = dest[1] = CLI_SIZE_ANY;                                     \
     }
 
         CDBRANGE(tokens[2], new->csize);

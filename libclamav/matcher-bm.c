@@ -52,15 +52,18 @@ cl_error_t cli_bm_addpatt(struct cli_matcher *root, struct cli_bm_patt *pattern,
         return CL_EMALFDB;
     }
 
-    if (CL_SUCCESS != (ret = cli_caloff(offset, NULL, root->type, pattern->offdata, &pattern->offset_min, &pattern->offset_max))) {
+    ret = matcher_decode_offset_string(root->mempool, offset, root->type, &pattern->offset_data);
+    if (CL_SUCCESS != ret) {
         cli_errmsg("cli_bm_addpatt: Can't calculate offset for signature %s\n", pattern->virname);
         return ret;
     }
-    if (pattern->offdata[0] != CLI_OFF_ANY) {
-        if (pattern->offdata[0] == CLI_OFF_ABSOLUTE)
+
+    if (pattern->offset_data != NULL) {
+        if (pattern->offset_data->type == PATTERN_OFF_ABSOLUTE) {
             root->bm_absoff_num++;
-        else
+        } else {
             root->bm_reloff_num++;
+        }
     }
 
     /* bm_offmode doesn't use the prefilter for BM signatures anyway, so
@@ -125,8 +128,12 @@ cl_error_t cli_bm_addpatt(struct cli_matcher *root, struct cli_bm_patt *pattern,
             return CL_EMEM;
         }
         root->bm_pattab[root->bm_patterns] = pattern;
-        if (pattern->offdata[0] != CLI_OFF_ABSOLUTE)
-            pattern->offset_min = root->bm_patterns;
+
+        if ((pattern->offset_data != NULL) &&
+            (pattern->offset_data->type != PATTERN_OFF_ABSOLUTE)) {
+
+            pattern->offset_data->offset_min = root->bm_patterns;
+        }
     }
 
     root->bm_patterns++;
@@ -180,22 +187,32 @@ cl_error_t cli_bm_initoff(const struct cli_matcher *root, struct cli_bm_off *dat
     }
     for (i = 0; i < root->bm_patterns; i++) {
         patt = root->bm_pattab[i];
-        if (patt->offdata[0] == CLI_OFF_ABSOLUTE) {
-            data->offtab[data->cnt] = patt->offset_min + patt->prefix_length;
-            if (data->offtab[data->cnt] >= info->fsize)
-                continue;
-            data->cnt++;
-        } else if (CL_SUCCESS != (ret = cli_caloff(NULL, info, root->type, patt->offdata, &data->offset[patt->offset_min], NULL))) {
-            cli_errmsg("cli_bm_initoff: Can't calculate relative offset in signature for %s\n", patt->virname);
-            free(data->offtab);
-            free(data->offset);
-            return ret;
-        } else if ((data->offset[patt->offset_min] != CLI_OFF_NONE) && (data->offset[patt->offset_min] + patt->length <= info->fsize)) {
-            if (!data->cnt || (data->offset[patt->offset_min] + patt->prefix_length != data->offtab[data->cnt - 1])) {
-                data->offtab[data->cnt] = data->offset[patt->offset_min] + patt->prefix_length;
+
+        if (patt->offset_data != NULL) {
+            if (patt->offset_data->type == PATTERN_OFF_ABSOLUTE) {
+                data->offtab[data->cnt] = patt->offset_data->offset_min + patt->prefix_length;
                 if (data->offtab[data->cnt] >= info->fsize)
                     continue;
                 data->cnt++;
+            } else {
+                ret = matcher_calculate_relative_offsets(info, patt->offset_data, &data->offset[patt->offset_data->offset_min], NULL);
+                if (CL_SUCCESS != ret) {
+                    cli_errmsg("cli_bm_initoff: Can't calculate relative offset in signature for %s\n", patt->virname);
+                    free(data->offtab);
+                    free(data->offset);
+                    return ret;
+                }
+
+                if ((data->offset[patt->offset_data->offset_min] != CLI_SIZE_NONE) &&
+                    (data->offset[patt->offset_data->offset_min] + patt->length <= info->fsize)) {
+
+                    if (!data->cnt || (data->offset[patt->offset_data->offset_min] + patt->prefix_length != data->offtab[data->cnt - 1])) {
+                        data->offtab[data->cnt] = data->offset[patt->offset_data->offset_min] + patt->prefix_length;
+                        if (data->offtab[data->cnt] >= info->fsize)
+                            continue;
+                        data->cnt++;
+                    }
+                }
             }
         }
     }
@@ -235,6 +252,8 @@ void cli_bm_free(struct cli_matcher *root)
                     MPOOL_FREE(root->mempool, prev->pattern);
                 if (prev->virname)
                     MPOOL_FREE(root->mempool, prev->virname);
+                if (prev->offset_data)
+                    MPOOL_FREE(root->mempool, prev->offset_data);
                 MPOOL_FREE(root->mempool, prev);
             }
         }
@@ -314,13 +333,14 @@ cl_error_t cli_bm_scanbuff(const unsigned char *buffer, uint32_t length, const c
                     continue;
                 }
 
-                if (offdata) {
-                    if (p->offdata[0] == CLI_OFF_ABSOLUTE) {
-                        if (p->offset_min != offset + off - p->prefix_length) {
+                if (offdata && p->offset_data != NULL) {
+                    if (p->offset_data->type == PATTERN_OFF_ABSOLUTE) {
+                        if (p->offset_data->offset_min != offset + off - p->prefix_length) {
                             p = p->next;
                             continue;
                         }
-                    } else if ((offdata->offset[p->offset_min] == CLI_OFF_NONE) || (offdata->offset[p->offset_min] != offset + off - p->prefix_length)) {
+                    } else if ((offdata->offset[p->offset_data->offset_min] == CLI_SIZE_NONE) ||
+                               (offdata->offset[p->offset_data->offset_min] != offset + off - p->prefix_length)) {
                         p = p->next;
                         continue;
                     }
@@ -358,23 +378,29 @@ cl_error_t cli_bm_scanbuff(const unsigned char *buffer, uint32_t length, const c
                 }
 
                 if (found && p->length + p->prefix_length == j) {
-                    if (!offdata && (p->offset_min != CLI_OFF_ANY)) {
-                        if (p->offdata[0] != CLI_OFF_ABSOLUTE) {
+                    if ((offdata == NULL) &&
+                        (p->offset_data != NULL) &&
+                        (p->offset_data->offset_min != CLI_SIZE_ANY)) {
+
+                        if (p->offset_data != NULL && p->offset_data->type != PATTERN_OFF_ABSOLUTE) {
                             if (!info) {
                                 p = p->next;
                                 continue;
                             }
-                            ret = cli_caloff(NULL, info, root->type, p->offdata, &off_min, &off_max);
+
+                            ret = matcher_calculate_relative_offsets(info, p->offset_data, &off_min, &off_max);
                             if (ret != CL_SUCCESS) {
                                 cli_errmsg("cli_bm_scanbuff: Can't calculate relative offset in signature for %s\n", p->virname);
                                 return ret;
                             }
                         } else {
-                            off_min = p->offset_min;
-                            off_max = p->offset_max;
+                            off_min = p->offset_data->offset_min;
+                            off_max = p->offset_data->offset_max;
                         }
+
                         off = offset + i - p->prefix_length - BM_MIN_LENGTH + BM_BLOCK_SIZE;
-                        if (off_min == CLI_OFF_NONE || off_max < off || off_min > off) {
+
+                        if (off_min == CLI_SIZE_NONE || off_max < off || off_min > off) {
                             p = p->next;
                             continue;
                         }

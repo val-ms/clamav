@@ -697,6 +697,9 @@ void cli_ac_free(struct cli_matcher *root)
         if (patt->special) {
             mpool_ac_free_special(root->mempool, patt);
         }
+        if (patt->offset_data) {
+            MPOOL_FREE(root->mempool, patt->offset_data);
+        }
         MPOOL_FREE(root->mempool, patt);
     }
 
@@ -1392,7 +1395,7 @@ cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t
             return CL_EMEM;
         }
         for (i = 0; i < reloffsigs * 2; i += 2)
-            data->offset[i] = CLI_OFF_NONE;
+            data->offset[i] = CLI_SIZE_NONE;
     }
 
     data->partsigs = partsigs;
@@ -1501,20 +1504,20 @@ cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t
             return CL_EMEM;
         }
         for (j = 0; j < 64; j++) {
-            data->lsigsuboff_last[0][j]  = CLI_OFF_NONE;
-            data->lsigsuboff_first[0][j] = CLI_OFF_NONE;
+            data->lsigsuboff_last[0][j]  = CLI_SIZE_NONE;
+            data->lsigsuboff_first[0][j] = CLI_SIZE_NONE;
         }
         for (i = 1; i < lsigs; i++) {
             data->lsigsuboff_last[i]  = data->lsigsuboff_last[0] + 64 * i;
             data->lsigsuboff_first[i] = data->lsigsuboff_first[0] + 64 * i;
             for (j = 0; j < 64; j++) {
-                data->lsigsuboff_last[i][j]  = CLI_OFF_NONE;
-                data->lsigsuboff_first[i][j] = CLI_OFF_NONE;
+                data->lsigsuboff_last[i][j]  = CLI_SIZE_NONE;
+                data->lsigsuboff_first[i][j] = CLI_SIZE_NONE;
             }
         }
     }
     for (i = 0; i < 32; i++)
-        data->macro_lastmatch[i] = CLI_OFF_NONE;
+        data->macro_lastmatch[i] = CLI_SIZE_NONE;
 
     data->min_partno = 1;
 
@@ -1532,13 +1535,23 @@ cl_error_t cli_ac_caloff(const struct cli_matcher *root, struct cli_ac_data *dat
 
     for (i = 0; i < root->ac_reloff_num; i++) {
         patt = root->ac_reloff[i];
-        if (!info) {
-            data->offset[patt->offset_min] = CLI_OFF_NONE;
-        } else if (CL_SUCCESS != (ret = cli_caloff(NULL, info, root->type, patt->offdata, &data->offset[patt->offset_min], &data->offset[patt->offset_max]))) {
-            cli_errmsg("cli_ac_caloff: Can't calculate relative offset in signature for %s\n", patt->virname);
-            return ret;
-        } else if ((data->offset[patt->offset_min] != CLI_OFF_NONE) && (data->offset[patt->offset_min] + patt->length[1] > info->fsize)) {
-            data->offset[patt->offset_min] = CLI_OFF_NONE;
+
+        if (patt->offset_data != NULL) {
+            if (!info) {
+                data->offset[patt->offset_data->offset_min] = CLI_SIZE_NONE;
+            } else {
+                ret = matcher_calculate_relative_offsets(info, patt->offset_data, &data->offset[patt->offset_data->offset_min], &data->offset[patt->offset_data->offset_max]);
+                if (CL_SUCCESS != ret) {
+                    cli_errmsg("cli_ac_caloff: Can't calculate relative offset in signature for %s\n", patt->virname);
+                    return ret;
+                }
+
+                if ((data->offset[patt->offset_data->offset_min] != CLI_SIZE_NONE) &&
+                    (data->offset[patt->offset_data->offset_min] + patt->length[1] > info->fsize)) {
+
+                    data->offset[patt->offset_data->offset_min] = CLI_SIZE_NONE;
+                }
+            }
         }
     }
 
@@ -1642,13 +1655,13 @@ cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *
     const struct cli_ac_lsig *ac_lsig = root->ac_lsigtable[lsig_id];
     const struct cli_lsig_tdb *tdb    = &ac_lsig->tdb;
 
-    if (realoff != CLI_OFF_NONE) {
-        if (mdata->lsigsuboff_first[lsig_id][subsig_id] == CLI_OFF_NONE) {
+    if (realoff != CLI_SIZE_NONE) {
+        if (mdata->lsigsuboff_first[lsig_id][subsig_id] == CLI_SIZE_NONE) {
             /* If this is the first subsig in the lsig, store the offset in the first-list. */
             mdata->lsigsuboff_first[lsig_id][subsig_id] = realoff;
         }
 
-        if (mdata->lsigsuboff_last[lsig_id][subsig_id] != CLI_OFF_NONE &&
+        if (mdata->lsigsuboff_last[lsig_id][subsig_id] != CLI_SIZE_NONE &&
             /* If this isn't the first subsig match for this logical sig and the offset
                is earlier in the file than the last subsig match, don't count it. */
             ((!partial && realoff <= mdata->lsigsuboff_last[lsig_id][subsig_id]) ||
@@ -1740,7 +1753,7 @@ cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *
         /* start of previous lsig subsig match */
         last_macroprev_match = mdata->lsigsuboff_last[lsig_id][subsig_id];
 
-        if (last_macro_match == CLI_OFF_NONE ||
+        if (last_macro_match == CLI_SIZE_NONE ||
             last_macroprev_match + smin > last_macro_match ||
             last_macroprev_match + smax < last_macro_match) {
             cli_dbgmsg("Canceled false lsig macro match\n");
@@ -1769,7 +1782,7 @@ cl_error_t cli_ac_chkmacro(struct cli_matcher *root, struct cli_ac_data *data, u
     /* Loop through all subsigs, and if they are tied to macros check that the
      * macro matched at a correct distance */
     for (i = 0; i < tdb->subsigs; i++) {
-        rc = lsig_sub_matched(root, data, lsig_id, i, CLI_OFF_NONE, 0);
+        rc = lsig_sub_matched(root, data, lsig_id, i, CLI_SIZE_NONE, 0);
         if (rc != CL_SUCCESS)
             return rc;
     }
@@ -1826,20 +1839,37 @@ cl_error_t cli_ac_scanbuff(
                     continue;
                 }
                 bp = i + 1 - patt->depth;
-                if (patt->offdata[0] != CLI_OFF_VERSION && patt->offdata[0] != CLI_OFF_MACRO && !pattN->next_same && (patt->offset_min != CLI_OFF_ANY) && (!patt->sigid || patt->partno == 1)) {
-                    if (patt->offset_min == CLI_OFF_NONE) {
+
+                if ((patt->offset_data != NULL) &&
+                    (patt->offset_data->type != PATTERN_OFF_VERSION) &&
+                    (patt->offset_data->type != PATTERN_OFF_MACRO) &&
+                    (patt->offset_data->offset_min != CLI_SIZE_ANY) &&
+                    (pattN->next_same == NULL) &&
+                    (patt->sigid == 0 || patt->partno == 1)) {
+
+                    if ((patt->offset_data != NULL) &&
+                        (patt->offset_data->offset_min == CLI_SIZE_NONE)) {
+
                         pattN = pattN->next;
                         continue;
                     }
+
                     exptoff[0] = offset + bp - patt->prefix_length[2]; /* lower offset end */
                     exptoff[1] = offset + bp - patt->prefix_length[1]; /* higher offset end */
-                    if (patt->offdata[0] == CLI_OFF_ABSOLUTE) {
-                        if (patt->offset_max < exptoff[0] || patt->offset_min > exptoff[1]) {
+
+                    if (patt->offset_data->type == PATTERN_OFF_ABSOLUTE) {
+                        if (patt->offset_data->offset_max < exptoff[0] ||
+                            patt->offset_data->offset_min > exptoff[1]) {
+
                             pattN = pattN->next;
                             continue;
                         }
+
                     } else {
-                        if (mdata->offset[patt->offset_min] == CLI_OFF_NONE || mdata->offset[patt->offset_max] < exptoff[0] || mdata->offset[patt->offset_min] > exptoff[1]) {
+                        if ((mdata->offset[patt->offset_data->offset_min] == CLI_SIZE_NONE) ||
+                            (mdata->offset[patt->offset_data->offset_max] < exptoff[0]) ||
+                            (mdata->offset[patt->offset_data->offset_min] > exptoff[1])) {
+
                             pattN = pattN->next;
                             continue;
                         }
@@ -1859,30 +1889,43 @@ cl_error_t cli_ac_scanbuff(
                         }
 
                         realoff = offset + matchstart;
-                        if (pt->offdata[0] == CLI_OFF_VERSION) {
-                            if (false == cli_hashset_contains_maybe_noalloc(mdata->vinfo, realoff)) {
-                                ptN = ptN->next_same;
-                                continue;
-                            }
-                            cli_dbgmsg("cli_ac_scanbuff: VI match for offset %x\n", realoff);
-                        } else if (pt->offdata[0] == CLI_OFF_MACRO) {
-                            mdata->macro_lastmatch[patt->offdata[1]] = realoff;
-                            ptN                                      = ptN->next_same;
-                            continue;
-                        } else if (pt->offset_min != CLI_OFF_ANY && (!pt->sigid || pt->partno == 1)) {
-                            if (pt->offset_min == CLI_OFF_NONE) {
-                                ptN = ptN->next_same;
-                                continue;
-                            }
-                            if (pt->offdata[0] == CLI_OFF_ABSOLUTE) {
-                                if (pt->offset_max < realoff || pt->offset_min > realoff) {
+
+                        if (pt->offset_data != NULL) {
+                            if (pt->offset_data->type == PATTERN_OFF_VERSION) {
+                                if (false == cli_hashset_contains_maybe_noalloc(mdata->vinfo, realoff)) {
                                     ptN = ptN->next_same;
                                     continue;
                                 }
-                            } else {
-                                if (mdata->offset[pt->offset_min] == CLI_OFF_NONE || mdata->offset[pt->offset_max] < realoff || mdata->offset[pt->offset_min] > realoff) {
+
+                                cli_dbgmsg("cli_ac_scanbuff: VI match for offset %x\n", realoff);
+
+                            } else if (pt->offset_data->type == PATTERN_OFF_MACRO) {
+                                mdata->macro_lastmatch[patt->offset_data->offset_value] = realoff;
+                                ptN                                                     = ptN->next_same;
+                                continue;
+
+                            } else if (pt->offset_data->offset_min != CLI_SIZE_ANY && (!pt->sigid || pt->partno == 1)) {
+                                if (pt->offset_data->offset_min == CLI_SIZE_NONE) {
                                     ptN = ptN->next_same;
                                     continue;
+                                }
+
+                                if (pt->offset_data->type == PATTERN_OFF_ABSOLUTE) {
+                                    if (pt->offset_data->offset_max < realoff ||
+                                        pt->offset_data->offset_min > realoff) {
+
+                                        ptN = ptN->next_same;
+                                        continue;
+                                    }
+
+                                } else {
+                                    if (mdata->offset[pt->offset_data->offset_min] == CLI_SIZE_NONE ||
+                                        mdata->offset[pt->offset_data->offset_max] < realoff ||
+                                        mdata->offset[pt->offset_data->offset_min] > realoff) {
+
+                                        ptN = ptN->next_same;
+                                        continue;
+                                    }
                                 }
                             }
                         }
@@ -3064,7 +3107,7 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
         new->virname = virname_copy;
     }
 
-    ret = cli_caloff(offset, NULL, root->type, new->offdata, &new->offset_min, &new->offset_max);
+    ret = matcher_decode_offset_string(root->mempool, offset, root->type, &new->offset_data);
     if (ret != CL_SUCCESS) {
         MPOOL_FREE(root->mempool, new->prefix ? new->prefix : new->pattern);
         mpool_ac_free_special(root->mempool, new);
@@ -3085,9 +3128,12 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
         return ret;
     }
 
-    if ((new->offdata[0] != CLI_OFF_ANY) &&
-        (new->offdata[0] != CLI_OFF_ABSOLUTE) &&
-        (new->offdata[0] != CLI_OFF_MACRO)) {
+    if (new->offset_data != NULL &&
+        (new->offset_data->type != PATTERN_OFF_ABSOLUTE) &&
+        (new->offset_data->type != PATTERN_OFF_MACRO)) {
+        /*
+         * This new pattern has a relative offset.
+         */
 
         root->ac_reloff = (struct cli_ac_patt **)MPOOL_REALLOC2(root->mempool, root->ac_reloff, (root->ac_reloff_num + 1) * sizeof(struct cli_ac_patt *));
         if (!root->ac_reloff) {
@@ -3096,8 +3142,8 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
         }
 
         root->ac_reloff[root->ac_reloff_num] = new;
-        new->offset_min                      = root->ac_reloff_num * 2;
-        new->offset_max                      = new->offset_min + 1;
+        new->offset_data->offset_min         = root->ac_reloff_num * 2;
+        new->offset_data->offset_max         = new->offset_data->offset_min + 1;
         root->ac_reloff_num++;
     }
 

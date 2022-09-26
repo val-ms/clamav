@@ -182,18 +182,17 @@ struct cli_matcher {
 };
 
 struct cli_cdb {
-    char *virname;           /* virus name */
-    cli_file_t ctype;        /* container type */
-    regex_t name;            /* filename regex */
-    size_t csize[2];         /* container size (min, max); if csize[0] != csize[1]
-                              * then value of 0 makes the field ignored
-                              */
-    size_t fsizec[2];        /* file size in container */
-    size_t fsizer[2];        /* real file size */
-    int encrypted;           /* file is encrypted; 2 == ignore */
-    unsigned int filepos[2]; /* file position in container */
-    int res1;                /* reserved / format specific */
-    void *res2;              /* reserved / format specific */
+    char *virname;     /* virus name */
+    cli_file_t ctype;  /* container type */
+    regex_t name;      /* filename regex */
+    size_t csize[2];   /* container size (min, max); if csize[0] != csize[1]
+                        * then value of 0 makes the field ignored */
+    size_t fsizec[2];  /* file size in container */
+    size_t fsizer[2];  /* real file size */
+    int encrypted;     /* file is encrypted; 2 == ignore */
+    size_t filepos[2]; /* file position in container */
+    int res1;          /* reserved / format specific */
+    void *res2;        /* reserved / format specific */
 
     struct cli_cdb *next;
 };
@@ -244,22 +243,6 @@ static const struct cli_mtarget cli_mtargets[CLI_MTARGETS] = {
     {{CL_TYPE_JAVA, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "JAVA", TARGET_JAVA, 1, 0, 1},
     {{CL_TYPE_INTERNAL, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "INTERNAL", TARGET_INTERNAL, 1, 0, 1},
     {{CL_TYPE_OTHER, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "OTHER", TARGET_OTHER, 1, 0, 1}};
-
-// clang-format off
-
-#define CLI_OFF_ANY         0xffffffff
-#define CLI_OFF_NONE        0xfffffffe
-#define CLI_OFF_ABSOLUTE    1
-#define CLI_OFF_EOF_MINUS   2
-#define CLI_OFF_EP_PLUS     3
-#define CLI_OFF_EP_MINUS    4
-#define CLI_OFF_SL_PLUS     5
-#define CLI_OFF_SX_PLUS     6
-#define CLI_OFF_VERSION     7
-#define CLI_OFF_MACRO       8
-#define CLI_OFF_SE          9
-
-// clang-format on
 
 /**
  * @brief Non-magic scan matching using a file buffer for input.  Older API
@@ -357,7 +340,27 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
  */
 cl_error_t cli_exp_eval(cli_ctx *ctx, struct cli_matcher *root, struct cli_ac_data *acdata, struct cli_target_info *target_info, const char *hash);
 
-cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, unsigned int target, uint32_t *offdata, uint32_t *offset_min, uint32_t *offset_max);
+/**
+ * @brief Decode an offset string into the component offset, max_shift, etc.
+ *
+ * @param mempool           May be used to allocate a new offset_data structure.
+ * @param offstr            The offset string
+ * @param target            The target type for the signature. May be used to reject invalid offset options.
+ * @param[out] offset_data  Offset_data structure to fill out. May be allocated.
+ * @return cl_error_t
+ */
+cl_error_t matcher_decode_offset_string(mpool_t *mempool, const char *offstr, cli_target_t target, pattern_offset_data **offset_data);
+
+/**
+ * @brief Calculate relative offsets for the given scan target scan target.
+ *
+ * @param info              The target info structure to fill out.
+ * @param offset_data       The offset data structure to use for calculating offsets.
+ * @param[out] offset_min   The minimum offset to match.
+ * @param[out] offset_max   (optional) The maximum offsets for the given offset data.
+ * @return cl_error_t
+ */
+cl_error_t matcher_calculate_relative_offsets(const struct cli_target_info *info, pattern_offset_data *offset_data, uint32_t *offset_min, uint32_t *offset_max);
 
 /**
  * @brief Determine if an alert is a known false positive, using each fmap in the the ctx->container stack to check MD5, SHA1, and SHA256 hashes.

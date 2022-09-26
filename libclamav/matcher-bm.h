@@ -27,18 +27,20 @@
 #include "clamav-types.h"
 #include "fmap.h"
 #include "others.h"
+#include "matcher-offset.h"
 
 #define BM_BOUNDARY_EOL 1
 
 struct cli_bm_patt {
     unsigned char *pattern, *prefix;
     char *virname;
-    uint32_t offdata[4], offset_min, offset_max;
+    pattern_offset_data *offset_data;
     struct cli_bm_patt *next;
     uint16_t length, prefix_length;
     uint16_t cnt;
     unsigned char pattern0;
-    uint32_t boundary, filesize;
+    uint8_t boundary;
+    uint32_t filesize;
 };
 
 struct cli_bm_off {

@@ -510,7 +510,7 @@ cl_error_t cli_bcomp_scanbuf(const unsigned char *buffer, size_t buffer_length, 
         }
 
         /* no offset available, make a best effort */
-        if (offset == CLI_OFF_NONE) {
+        if (offset == CLI_SIZE_NONE) {
             offset = 0;
         }
 

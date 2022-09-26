@@ -575,7 +575,7 @@ int yr_execute_code(
 #if REAL_YARA
         push(string->matches[tidx].tail != NULL ? 1 : 0);
 #else
-        push(acdata->lsigsuboff_first[aclsig->id][string->subsig_id] != CLI_OFF_NONE ? 1 : 0);
+        push(acdata->lsigsuboff_first[aclsig->id][string->subsig_id] != CLI_SIZE_NONE ? 1 : 0);
 #endif
         break;
 
@@ -764,7 +764,7 @@ int yr_execute_code(
         {
           string = UINT64_TO_PTR(YR_STRING*, r1);
           lsig_id = string->subsig_id;
-          if (acdata->lsigsuboff_first[aclsig->id][lsig_id] != CLI_OFF_NONE)
+          if (acdata->lsigsuboff_first[aclsig->id][lsig_id] != CLI_SIZE_NONE)
             found++;
           count++;
           pop(r1);

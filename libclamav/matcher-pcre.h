@@ -57,8 +57,7 @@ struct cli_pcre_meta {
     uint32_t lsigid[3]; /* 0=valid, 1=lsigid, 2=subsigid */
     struct cli_pcre_data pdata;
     /* clamav offset data */
-    uint32_t offdata[4];
-    uint32_t offset_min, offset_max;
+    pattern_offset_data *offset_data;
     /* internal flags (bitfield?) */
     uint32_t flags;
     /* performance tracking */

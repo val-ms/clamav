@@ -288,18 +288,20 @@ cl_error_t cli_pcre_addpatt(struct cli_matcher *root, const char *virname, const
 
     /* offset parsing and usage, similar to cli_ac_addsig */
     /* relative and type-specific offsets handled during scan */
-    ret = cli_caloff(offset, NULL, root->type, pm->offdata, &(pm->offset_min), &(pm->offset_max));
+    ret = matcher_decode_offset_string(root->mempool, offset, root->type, &pm->offset_data);
     if (ret != CL_SUCCESS) {
         cli_errmsg("cli_pcre_addpatt: cannot calculate offset data: %s for pattern: %s\n", offset, pattern);
         cli_pcre_freemeta(root, pm);
         MPOOL_FREE(root->mempool, pm);
         return ret;
     }
-    if (pm->offdata[0] != CLI_OFF_ANY) {
-        if (pm->offdata[0] == CLI_OFF_ABSOLUTE)
+
+    if (pm->offset_data != NULL) {
+        if (pm->offset_data->type == PATTERN_OFF_ABSOLUTE) {
             root->pcre_absoff_num++;
-        else
+        } else {
             root->pcre_reloff_num++;
+        }
     }
 
     /* parse and add options, also totally not from snort */
@@ -483,8 +485,8 @@ cl_error_t cli_pcre_recaloff(struct cli_matcher *root, struct cli_pcre_off *data
         return CL_EMEM;
     }
 
-    pm_dbgmsg("CLI_OFF_NONE: %u\n", CLI_OFF_NONE);
-    pm_dbgmsg("CLI_OFF_ANY: %u\n", CLI_OFF_ANY);
+    pm_dbgmsg("CLI_SIZE_NONE: %u\n", CLI_SIZE_NONE);
+    pm_dbgmsg("CLI_SIZE_ANY: %u\n", CLI_SIZE_ANY);
 
     /* iterate across all pcre metadata and recalc offsets */
     for (i = 0; i < root->pcre_metas; ++i) {
@@ -492,39 +494,40 @@ cl_error_t cli_pcre_recaloff(struct cli_matcher *root, struct cli_pcre_off *data
 
         /* skip broken pcres, not getting executed anyways */
         if (pm->flags & CLI_PCRE_DISABLED) {
-            data->offset[i] = CLI_OFF_NONE;
+            data->offset[i] = CLI_SIZE_NONE;
             data->shift[i]  = 0;
             continue;
         }
 
-        if (pm->offdata[0] == CLI_OFF_ANY) {
-            data->offset[i] = CLI_OFF_ANY;
+        if (pm->offset_data == NULL) {
+            /* No offset specified. Pattern may match anywhere in buffer. */
+            data->offset[i] = CLI_SIZE_ANY;
             data->shift[i]  = 0;
-        } else if (pm->offdata[0] == CLI_OFF_NONE) {
-            data->offset[i] = CLI_OFF_NONE;
+        } else if (pm->offset_data->type == PATTERN_OFF_NONE) {
+            data->offset[i] = CLI_SIZE_NONE;
             data->shift[i]  = 0;
-        } else if (pm->offdata[0] == CLI_OFF_ABSOLUTE) {
-            data->offset[i] = pm->offdata[1];
-            data->shift[i]  = pm->offdata[2];
+        } else if (pm->offset_data->type == PATTERN_OFF_ABSOLUTE) {
+            data->offset[i] = pm->offset_data->offset_value;
+            data->shift[i]  = pm->offset_data->max_shift;
         } else {
-            ret = cli_caloff(NULL, info, root->type, pm->offdata, &data->offset[i], &endoff);
+            ret = matcher_calculate_relative_offsets(info, pm->offset_data, &data->offset[i], &endoff);
             if (ret != CL_SUCCESS) {
                 cli_errmsg("cli_pcre_recaloff: cannot recalculate relative offset for signature\n");
                 free(data->shift);
                 free(data->offset);
                 return ret;
             }
-            /* CLI_OFF_NONE gets passed down, CLI_OFF_ANY gets reinterpreted */
-            /* TODO - CLI_OFF_VERSION is interpreted as CLI_OFF_ANY(?) */
-            if (data->offset[i] == CLI_OFF_ANY) {
-                data->offset[i] = CLI_OFF_ANY;
+            /* CLI_SIZE_NONE gets passed down, CLI_SIZE_ANY gets reinterpreted */
+            /* TODO - PATTERN_OFF_VERSION is interpreted as CLI_SIZE_ANY(?) */
+            if (data->offset[i] == CLI_SIZE_ANY) {
+                data->offset[i] = CLI_SIZE_ANY;
                 data->shift[i]  = 0;
             } else {
                 data->shift[i] = endoff - (data->offset[i]);
             }
         }
 
-        pm_dbgmsg("%u: %u %u->%u(+%u)\n", i, pm->offdata[0], data->offset[i],
+        pm_dbgmsg("%u: %u %u->%u(+%u)\n", i, pm->offset_data->type, data->offset[i],
                   data->offset[i] + data->shift[i], data->shift[i]);
     }
 
@@ -547,17 +550,18 @@ int cli_pcre_qoff(struct cli_pcre_meta *pm, uint32_t length, uint32_t *adjbuffer
         return CL_ENULLARG;
 
     /* default to scanning whole buffer but try to use existing offdata */
-    if (pm->offdata[0] == CLI_OFF_NONE) {
-        return CL_BREAK;
-    } else if (pm->offdata[0] == CLI_OFF_ANY) {
-        *adjbuffer = CLI_OFF_ANY;
+    if (pm->offset_data == NULL) {
+        /* No offset specified. Pattern may match anywhere in buffer. */
+        *adjbuffer = CLI_SIZE_ANY;
         *adjshift  = 0;
-    } else if (pm->offdata[0] == CLI_OFF_ABSOLUTE) {
-        *adjbuffer = pm->offdata[1];
-        *adjshift  = pm->offdata[2];
-    } else if (pm->offdata[0] == CLI_OFF_EOF_MINUS) {
-        *adjbuffer = length - pm->offdata[1];
-        *adjshift  = pm->offdata[2];
+    } else if (pm->offset_data->type == PATTERN_OFF_NONE) {
+        return CL_BREAK;
+    } else if (pm->offset_data->type == PATTERN_OFF_ABSOLUTE) {
+        *adjbuffer = pm->offset_data->offset_value;
+        *adjshift  = pm->offset_data->max_shift;
+    } else if (pm->offset_data->type == PATTERN_OFF_EOF_MINUS) {
+        *adjbuffer = length - pm->offset_data->offset_value;
+        *adjshift  = pm->offset_data->max_shift;
     } else {
         /* all relative offsets */
         /* TODO - check if relative offsets apply for normal hex substrs */
@@ -600,9 +604,9 @@ cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const 
             continue;
         }
 
-        /* skip checking and running CLI_OFF_NONE pcres */
-        if (data && data->offset[i] == CLI_OFF_NONE) {
-            pm_dbgmsg("cli_pcre_scanbuf: skipping CLI_OFF_NONE regex /%s/\n", pd->expression);
+        /* skip checking and running CLI_SIZE_NONE pcres */
+        if (data && data->offset[i] == CLI_SIZE_NONE) {
+            pm_dbgmsg("cli_pcre_scanbuf: skipping CLI_SIZE_NONE regex /%s/\n", pd->expression);
             continue;
         }
 
@@ -637,7 +641,7 @@ cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const 
         }
 
         /* check for need to anchoring */
-        if (!rolling && !adjshift && (adjbuffer != CLI_OFF_ANY))
+        if (!rolling && !adjshift && (adjbuffer != CLI_SIZE_ANY))
 #if USING_PCRE2
             options |= PCRE2_ANCHORED;
 #else
@@ -646,13 +650,13 @@ cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const 
         else
             options = 0;
 
-        if (adjbuffer == CLI_OFF_ANY)
+        if (adjbuffer == CLI_SIZE_ANY)
             adjbuffer = 0;
 
         /* check the offset bounds */
         if (adjbuffer < length) {
             /* handle encompass flag */
-            if (encompass && adjshift != 0 && adjshift != CLI_OFF_NONE) {
+            if (encompass && adjshift != 0 && adjshift != CLI_SIZE_NONE) {
                 if (adjbuffer + adjshift > length)
                     adjlength = length - adjbuffer;
                 else
@@ -788,6 +792,11 @@ void cli_pcre_freemeta(struct cli_matcher *root, struct cli_pcre_meta *pm)
     if (pm->statname) {
         free(pm->statname);
         pm->statname = NULL;
+    }
+
+    if (pm->offset_data) {
+        MPOOL_FREE(root->mempool, pm->offset_data);
+        pm->offset_data = NULL;
     }
 
     cli_pcre_free_single(&(pm->pdata));

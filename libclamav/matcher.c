@@ -340,184 +340,213 @@ cl_error_t cli_scan_buff(const unsigned char *buffer, uint32_t length, uint32_t 
     return ret;
 }
 
-/*
- * offdata[0]: type
- * offdata[1]: offset value
- * offdata[2]: max shift
- * offdata[3]: section number
- */
-cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, cli_target_t target, uint32_t *offdata, uint32_t *offset_min, uint32_t *offset_max)
+cl_error_t matcher_decode_offset_string(mpool_t *mempool, const char *offstr, cli_target_t target, pattern_offset_data **offset_data)
 {
     char offcpy[65] = {0};
     unsigned int n = 0, val = 0;
     char *pt = NULL;
 
-    if (!info) { /* decode offset string */
-        if (!offstr) {
-            cli_errmsg("cli_caloff: offstr == NULL\n");
-            return CL_ENULLARG;
-        }
+#if !USE_MPOOL
+    UNUSEDPARAM(mempool);
+#endif
 
-        if (!strcmp(offstr, "*")) {
-            offdata[0] = *offset_max = *offset_min = CLI_OFF_ANY;
-            return CL_SUCCESS;
-        }
+    if (NULL == offset_data) {
+        return CL_EARG;
+    }
 
-        if (strlen(offstr) > 64) {
-            cli_errmsg("cli_caloff: Offset string too long\n");
+    if (!offstr) {
+        cli_errmsg("matcher_decode_offset_string: offstr == NULL\n");
+        return CL_ENULLARG;
+    }
+
+    if (!strcmp(offstr, "*")) {
+        return CL_SUCCESS;
+    }
+
+    *offset_data = MPOOL_CALLOC(mempool, 1, sizeof(pattern_offset_data));
+    if (NULL == offset_data) {
+        cli_errmsg("Failed to allocate memory for pattern_offset_data\n");
+        return CL_EMEM;
+    }
+
+    if (strlen(offstr) > 64) {
+        cli_errmsg("matcher_decode_offset_string: Offset string too long\n");
+        return CL_EMALFDB;
+    }
+    strcpy(offcpy, offstr);
+
+    if ((pt = strchr(offcpy, ','))) {
+        if (!cli_isnumber(pt + 1)) {
+            cli_errmsg("matcher_decode_offset_string: Invalid offset shift value\n");
             return CL_EMALFDB;
         }
-        strcpy(offcpy, offstr);
+        (*offset_data)->max_shift = atoi(pt + 1);
+        *pt                       = 0;
+    } else {
+        (*offset_data)->max_shift = 0;
+    }
 
-        if ((pt = strchr(offcpy, ','))) {
-            if (!cli_isnumber(pt + 1)) {
-                cli_errmsg("cli_caloff: Invalid offset shift value\n");
+    (*offset_data)->offset_max = (*offset_data)->offset_min = CLI_SIZE_NONE;
+
+    if (!strncmp(offcpy, "EP+", 3) || !strncmp(offcpy, "EP-", 3)) {
+        if (offcpy[2] == '+')
+            (*offset_data)->type = PATTERN_OFF_EP_PLUS;
+        else
+            (*offset_data)->type = PATTERN_OFF_EP_MINUS;
+
+        if (!cli_isnumber(&offcpy[3])) {
+            cli_errmsg("matcher_decode_offset_string: Invalid offset value\n");
+            return CL_EMALFDB;
+        }
+        (*offset_data)->offset_value = atoi(&offcpy[3]);
+
+    } else if (offcpy[0] == 'S') {
+        if (offcpy[1] == 'E') {
+            if (!cli_isnumber(&offcpy[2])) {
+                cli_errmsg("matcher_decode_offset_string: Invalid section number\n");
                 return CL_EMALFDB;
             }
-            offdata[2] = atoi(pt + 1);
-            *pt        = 0;
-        } else {
-            offdata[2] = 0;
-        }
+            (*offset_data)->type           = PATTERN_OFF_SE;
+            (*offset_data)->section_number = atoi(&offcpy[2]);
 
-        *offset_max = *offset_min = CLI_OFF_NONE;
-
-        if (!strncmp(offcpy, "EP+", 3) || !strncmp(offcpy, "EP-", 3)) {
-            if (offcpy[2] == '+')
-                offdata[0] = CLI_OFF_EP_PLUS;
-            else
-                offdata[0] = CLI_OFF_EP_MINUS;
-
+        } else if (!strncmp(offstr, "SL+", 3)) {
+            (*offset_data)->type = PATTERN_OFF_SL_PLUS;
             if (!cli_isnumber(&offcpy[3])) {
-                cli_errmsg("cli_caloff: Invalid offset value\n");
+                cli_errmsg("matcher_decode_offset_string: Invalid offset value\n");
                 return CL_EMALFDB;
             }
-            offdata[1] = atoi(&offcpy[3]);
+            (*offset_data)->offset_value = atoi(&offcpy[3]);
 
-        } else if (offcpy[0] == 'S') {
-            if (offcpy[1] == 'E') {
-                if (!cli_isnumber(&offcpy[2])) {
-                    cli_errmsg("cli_caloff: Invalid section number\n");
-                    return CL_EMALFDB;
-                }
-                offdata[0] = CLI_OFF_SE;
-                offdata[3] = atoi(&offcpy[2]);
-
-            } else if (!strncmp(offstr, "SL+", 3)) {
-                offdata[0] = CLI_OFF_SL_PLUS;
-                if (!cli_isnumber(&offcpy[3])) {
-                    cli_errmsg("cli_caloff: Invalid offset value\n");
-                    return CL_EMALFDB;
-                }
-                offdata[1] = atoi(&offcpy[3]);
-
-            } else if (sscanf(offcpy, "S%u+%u", &n, &val) == 2) {
-                offdata[0] = CLI_OFF_SX_PLUS;
-                offdata[1] = val;
-                offdata[3] = n;
-            } else {
-                cli_errmsg("cli_caloff: Invalid offset string\n");
-                return CL_EMALFDB;
-            }
-
-        } else if (!strncmp(offcpy, "EOF-", 4)) {
-            offdata[0] = CLI_OFF_EOF_MINUS;
-            if (!cli_isnumber(&offcpy[4])) {
-                cli_errmsg("cli_caloff: Invalid offset value\n");
-                return CL_EMALFDB;
-            }
-            offdata[1] = atoi(&offcpy[4]);
-        } else if (!strncmp(offcpy, "VI", 2)) {
-            /* versioninfo */
-            offdata[0] = CLI_OFF_VERSION;
-        } else if (strchr(offcpy, '$')) {
-            if (sscanf(offcpy, "$%u$", &n) != 1) {
-                cli_errmsg("cli_caloff: Invalid macro($) in offset: %s\n", offcpy);
-                return CL_EMALFDB;
-            }
-            if (n >= 32) {
-                cli_errmsg("cli_caloff: at most 32 macro groups supported\n");
-                return CL_EMALFDB;
-            }
-            offdata[0] = CLI_OFF_MACRO;
-            offdata[1] = n;
+        } else if (sscanf(offcpy, "S%u+%u", &n, &val) == 2) {
+            (*offset_data)->type           = PATTERN_OFF_SX_PLUS;
+            (*offset_data)->offset_value   = val;
+            (*offset_data)->section_number = n;
         } else {
-            offdata[0] = CLI_OFF_ABSOLUTE;
-            if (!cli_isnumber(offcpy)) {
-                cli_errmsg("cli_caloff: Invalid offset value\n");
-                return CL_EMALFDB;
-            }
-            *offset_min = offdata[1] = atoi(offcpy);
-            *offset_max              = *offset_min + offdata[2];
+            cli_errmsg("matcher_decode_offset_string: Invalid offset string\n");
+            return CL_EMALFDB;
         }
 
-        if (offdata[0] != CLI_OFF_ANY && offdata[0] != CLI_OFF_ABSOLUTE &&
-            offdata[0] != CLI_OFF_EOF_MINUS && offdata[0] != CLI_OFF_MACRO) {
-            if (target != TARGET_PE && target != TARGET_ELF && target != TARGET_MACHO) {
-                cli_errmsg("cli_caloff: Invalid offset type for target %u\n", target);
-                return CL_EMALFDB;
-            }
+    } else if (!strncmp(offcpy, "EOF-", 4)) {
+        (*offset_data)->type = PATTERN_OFF_EOF_MINUS;
+        if (!cli_isnumber(&offcpy[4])) {
+            cli_errmsg("matcher_decode_offset_string: Invalid offset value\n");
+            return CL_EMALFDB;
         }
+        (*offset_data)->offset_value = atoi(&offcpy[4]);
+
+    } else if (!strncmp(offcpy, "VI", 2)) {
+        /* versioninfo */
+        (*offset_data)->type = PATTERN_OFF_VERSION;
+
+    } else if (strchr(offcpy, '$')) {
+        if (sscanf(offcpy, "$%u$", &n) != 1) {
+            cli_errmsg("matcher_decode_offset_string: Invalid macro($) in offset: %s\n", offcpy);
+            return CL_EMALFDB;
+        }
+        if (n >= 32) {
+            cli_errmsg("matcher_decode_offset_string: at most 32 macro groups supported\n");
+            return CL_EMALFDB;
+        }
+        (*offset_data)->type         = PATTERN_OFF_MACRO;
+        (*offset_data)->offset_value = n;
 
     } else {
-        /* calculate relative offsets */
-        *offset_min = CLI_OFF_NONE;
-        if (offset_max)
-            *offset_max = CLI_OFF_NONE;
-        if (info->status == -1) {
-            // If the executable headers weren't parsed successfully then we
-            // can't process any ndb/ldb EOF-n/EP+n/EP-n/Sx+n/SEx/SL+n subsigs
-            return CL_SUCCESS;
+        (*offset_data)->type = PATTERN_OFF_ABSOLUTE;
+        if (!cli_isnumber(offcpy)) {
+            cli_errmsg("matcher_decode_offset_string: Invalid offset value\n");
+            return CL_EMALFDB;
         }
 
-        switch (offdata[0]) {
-            case CLI_OFF_EOF_MINUS:
-                *offset_min = info->fsize - offdata[1];
-                break;
+        (*offset_data)->offset_min = (*offset_data)->offset_value = atoi(offcpy);
 
-            case CLI_OFF_EP_PLUS:
-                *offset_min = info->exeinfo.ep + offdata[1];
-                break;
+        (*offset_data)->offset_max = (*offset_data)->offset_min + (*offset_data)->max_shift;
+    }
 
-            case CLI_OFF_EP_MINUS:
-                *offset_min = info->exeinfo.ep - offdata[1];
-                break;
+    if ((*offset_data)->type != PATTERN_OFF_ABSOLUTE &&
+        (*offset_data)->type != PATTERN_OFF_EOF_MINUS &&
+        (*offset_data)->type != PATTERN_OFF_MACRO) {
+        /* The other offset types only work for PE, ELF and Mach-O files */
 
-            case CLI_OFF_SL_PLUS:
-                *offset_min = info->exeinfo.sections[info->exeinfo.nsections - 1].raw + offdata[1];
-                break;
+        if (target != TARGET_PE && target != TARGET_ELF && target != TARGET_MACHO) {
+            cli_errmsg("matcher_decode_offset_string: Invalid offset type for target %u\n", target);
+            return CL_EMALFDB;
+        }
+    }
 
-            case CLI_OFF_SX_PLUS:
-                if (offdata[3] >= info->exeinfo.nsections)
-                    *offset_min = CLI_OFF_NONE;
-                else
-                    *offset_min = info->exeinfo.sections[offdata[3]].raw + offdata[1];
-                break;
+    return CL_SUCCESS;
+}
 
-            case CLI_OFF_SE:
-                if (offdata[3] >= info->exeinfo.nsections) {
-                    *offset_min = CLI_OFF_NONE;
-                } else {
-                    *offset_min = info->exeinfo.sections[offdata[3]].raw;
-                    if (offset_max)
-                        *offset_max = *offset_min + info->exeinfo.sections[offdata[3]].rsz + offdata[2];
-                    // TODO offdata[2] == MaxShift. Won't this make offset_max
-                    // extend beyond the end of the section?  This doesn't seem like
-                    // what we want...
+cl_error_t matcher_calculate_relative_offsets(const struct cli_target_info *info, pattern_offset_data *offset_data, uint32_t *offset_min, uint32_t *offset_max)
+{
+    if (NULL == offset_data) {
+        return CL_EARG;
+    }
+
+    /* calculate relative offsets */
+    *offset_min = CLI_SIZE_NONE;
+    if (offset_max != NULL) {
+        *offset_max = CLI_SIZE_NONE;
+    }
+
+    if (info->status == -1) {
+        // If the executable headers weren't parsed successfully then we
+        // can't process any ndb/ldb EOF-n/EP+n/EP-n/Sx+n/SEx/SL+n subsigs
+        return CL_SUCCESS;
+    }
+
+    switch (offset_data->type) {
+        case PATTERN_OFF_EOF_MINUS:
+            *offset_min = info->fsize - offset_data->offset_value;
+            break;
+
+        case PATTERN_OFF_EP_PLUS:
+            *offset_min = info->exeinfo.ep + offset_data->offset_value;
+            break;
+
+        case PATTERN_OFF_EP_MINUS:
+            *offset_min = info->exeinfo.ep - offset_data->offset_value;
+            break;
+
+        case PATTERN_OFF_SL_PLUS:
+            *offset_min = info->exeinfo.sections[info->exeinfo.nsections - 1].raw + offset_data->offset_value;
+            break;
+
+        case PATTERN_OFF_SX_PLUS:
+            if (offset_data->section_number >= info->exeinfo.nsections)
+                *offset_min = CLI_SIZE_NONE;
+            else
+                *offset_min = info->exeinfo.sections[offset_data->section_number].raw + offset_data->offset_value;
+            break;
+
+        case PATTERN_OFF_SE:
+            if (offset_data->section_number >= info->exeinfo.nsections) {
+                *offset_min = CLI_SIZE_NONE;
+            } else {
+                *offset_min = info->exeinfo.sections[offset_data->section_number].raw;
+                if (offset_max != NULL) {
+                    *offset_max = *offset_min + info->exeinfo.sections[offset_data->section_number].rsz + offset_data->max_shift;
                 }
-                break;
+                // TODO offset_data->max_shift == MaxShift. Won't this make offset_max
+                // extend beyond the end of the section?  This doesn't seem like
+                // what we want...
+            }
+            break;
 
-            case CLI_OFF_VERSION:
-                if (offset_max)
-                    *offset_min = *offset_max = CLI_OFF_ANY;
-                break;
-            default:
-                cli_errmsg("cli_caloff: Not a relative offset (type: %u)\n", offdata[0]);
-                return CL_EARG;
-        }
+        case PATTERN_OFF_VERSION:
+            if (offset_max != NULL) {
+                *offset_min = *offset_max = CLI_SIZE_ANY;
+            }
+            break;
+        default:
+            cli_errmsg("matcher_calculate_relative_offsets: Not a relative offset (type: %u)\n", offset_data->type);
+            return CL_EARG;
+    }
 
-        if (offset_max && *offset_max == CLI_OFF_NONE && *offset_min != CLI_OFF_NONE)
-            *offset_max = *offset_min + offdata[2];
+    if ((offset_max != NULL) &&
+        (offset_data->offset_max == CLI_SIZE_NONE) &&
+        (offset_data->offset_min != CLI_SIZE_NONE)) {
+
+        offset_data->offset_max = offset_data->offset_min + offset_data->max_shift;
     }
 
     return CL_SUCCESS;
@@ -1413,7 +1442,7 @@ done:
 }
 
 #define CDBRANGE(field, val)                                              \
-    if (field[0] != CLI_OFF_ANY) {                                        \
+    if (field[0] != CLI_SIZE_ANY) {                                       \
         if (field[0] == field[1] && field[0] != val)                      \
             continue;                                                     \
         else if (field[0] != field[1] && ((field[0] && field[0] > val) || \

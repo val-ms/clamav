@@ -989,6 +989,16 @@ pub struct cli_hashset {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+pub struct pattern_offset_data {
+    pub offset_value: u32,
+    pub max_shift: u32,
+    pub offset_min: u32,
+    pub offset_max: u32,
+    pub section_number: u16,
+    pub type_: u8,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct cli_subsig_matches {
     pub last: u32,
     pub next: u32,
@@ -1063,12 +1073,10 @@ pub struct cli_ac_patt {
     pub special: u16,
     pub special_pattern: u16,
     pub special_table: *mut *mut cli_ac_special,
+    pub offset_data: *mut pattern_offset_data,
     pub rtype: u16,
     pub type_: u16,
-    pub offdata: [u32; 4usize],
-    pub offset_min: u32,
-    pub offset_max: u32,
-    pub boundary: u32,
+    pub boundary: u16,
     pub depth: u8,
     pub sigopts: u8,
 }
@@ -1113,15 +1121,13 @@ pub struct cli_bm_patt {
     pub pattern: *mut ::std::os::raw::c_uchar,
     pub prefix: *mut ::std::os::raw::c_uchar,
     pub virname: *mut ::std::os::raw::c_char,
-    pub offdata: [u32; 4usize],
-    pub offset_min: u32,
-    pub offset_max: u32,
+    pub offset_data: *mut pattern_offset_data,
     pub next: *mut cli_bm_patt,
     pub length: u16,
     pub prefix_length: u16,
     pub cnt: u16,
     pub pattern0: ::std::os::raw::c_uchar,
-    pub boundary: u32,
+    pub boundary: u8,
     pub filesize: u32,
 }
 #[repr(C)]
@@ -1168,9 +1174,7 @@ pub struct cli_pcre_meta {
     pub trigger: *mut ::std::os::raw::c_char,
     pub lsigid: [u32; 3usize],
     pub pdata: cli_pcre_data,
-    pub offdata: [u32; 4usize],
-    pub offset_min: u32,
-    pub offset_max: u32,
+    pub offset_data: *mut pattern_offset_data,
     pub flags: u32,
     pub statname: *mut ::std::os::raw::c_char,
     pub sigtime_id: u32,
@@ -1298,7 +1302,7 @@ pub struct cli_cdb {
     pub fsizec: [size_t; 2usize],
     pub fsizer: [size_t; 2usize],
     pub encrypted: ::std::os::raw::c_int,
-    pub filepos: [::std::os::raw::c_uint; 2usize],
+    pub filepos: [size_t; 2usize],
     pub res1: ::std::os::raw::c_int,
     pub res2: *mut ::std::os::raw::c_void,
     pub next: *mut cli_cdb,

@@ -812,15 +812,18 @@ parse_central_directory_file_header(
 
     *ret = CL_EPARSE;
 
-    if (!(central_header = fmap_need_off(map, coff, SIZEOF_CENTRAL_HEADER)) || CENTRAL_HEADER_magic != ZIP_MAGIC_CENTRAL_DIRECTORY_RECORD_BEGIN) {
-        if (central_header) {
-            fmap_unneed_ptr(map, central_header, SIZEOF_CENTRAL_HEADER);
-            central_header = NULL;
-        }
-        cli_dbgmsg("cli_unzip: central header - wrkcomplete\n");
+    if (NULL == (central_header = fmap_need_off(map, coff, SIZEOF_CENTRAL_HEADER))) {
+        cli_dbgmsg("cli_unzip: failed to get pointer for central header from fmap\n");
         last = 1;
         goto done;
     }
+
+    if (CENTRAL_HEADER_magic != ZIP_MAGIC_CENTRAL_DIRECTORY_RECORD_BEGIN) {
+        cli_dbgmsg("cli_unzip: alleged central directory header does not start with expected magic bytes\n");
+        last = 1;
+        goto done;
+    }
+
     coff += SIZEOF_CENTRAL_HEADER;
 
     cli_dbgmsg("cli_unzip: central header - flags %x - method %x - csize %x - usize %x - flen %x - elen %x - clen %x - disk %x - off %x\n",

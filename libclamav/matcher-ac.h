@@ -28,6 +28,7 @@
 #include "clamav-types.h"
 #include "fmap.h"
 #include "hashtab.h"
+#include "matcher-offset.h"
 
 #define AC_CH_MAXDIST 32
 #define ACPATT_ALTN_MAXNEST 15
@@ -99,9 +100,9 @@ struct cli_ac_patt {
     uint16_t ch_maxdist[2];
     uint16_t parts, partno, special, special_pattern;
     struct cli_ac_special **special_table;
+    pattern_offset_data *offset_data;
     uint16_t rtype, type;
-    uint32_t offdata[4], offset_min, offset_max;
-    uint32_t boundary;
+    uint16_t boundary;
     uint8_t depth;
     uint8_t sigopts;
 };

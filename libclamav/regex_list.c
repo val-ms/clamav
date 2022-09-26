@@ -689,15 +689,15 @@ static cl_error_t add_newsuffix(struct regex_matcher *matcher, struct regex_list
         goto done;
     }
 
-    new->rtype      = 0;
-    new->type       = 0;
-    new->sigid      = 0;
-    new->parts      = 0;
-    new->partno     = 0;
-    new->mindist    = 0;
-    new->maxdist    = 0;
-    new->offset_min = CLI_OFF_ANY;
-    new->length[0]  = (uint16_t)len;
+    new->rtype       = 0;
+    new->type        = 0;
+    new->sigid       = 0;
+    new->parts       = 0;
+    new->partno      = 0;
+    new->mindist     = 0;
+    new->maxdist     = 0;
+    new->offset_data = NULL;
+    new->length[0]   = (uint16_t)len;
 
     new->ch[0] = new->ch[1] |= CLI_MATCH_IGNORE;
     if (new->length[0] > root->maxpatlen)

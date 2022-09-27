@@ -161,7 +161,7 @@ static inline cl_error_t matcher_run(const struct cli_matcher *root,
         }
     }
     perf_log_tries(acmode, 0, length);
-    ret = cli_ac_scanbuff(buffer, length, virname, NULL, acres, root, mdata, offset, ftype, ftoffset, acmode, ctx);
+    ret = cli_ac_scanbuff(buffer, length, (void **)virname, acres, root, mdata, offset, ftype, ftoffset, acmode, ctx);
     if (ret != CL_SUCCESS) {
         if (ret == CL_VIRUS) {
             ret = cli_append_virus(ctx, *virname);

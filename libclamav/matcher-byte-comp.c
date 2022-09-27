@@ -502,10 +502,9 @@ cl_error_t cli_bcomp_scanbuf(const unsigned char *buffer, size_t buffer_length, 
                     ret = CL_EMEM;
                     break;
                 }
-                newres->virname    = "test";
-                newres->customdata = NULL;
-                newres->next       = *res;
-                *res               = newres;
+                newres->match_context = "test";
+                newres->next          = *res;
+                *res                  = newres;
             }
         }
 

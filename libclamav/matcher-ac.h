@@ -94,8 +94,8 @@ struct cli_ac_patt {
     uint32_t sigid;
     uint32_t lsigid[3];
     uint16_t ch[2];
-    char *virname;
-    void *customdata;
+    /* context is most commonly the virname/signature name, but could also be something else, like a regex struct. */
+    void *match_context;
     uint16_t ch_mindist[2];
     uint16_t ch_maxdist[2];
     uint16_t parts, partno, special, special_pattern;
@@ -125,9 +125,13 @@ struct cli_ac_node {
 #define IS_FINAL(node) (!!node->list)
 
 struct cli_ac_result {
-    const char *virname;
-    void *customdata;
+    /* context is most commonly the virname/signature name, but could also be something else, like a regex struct. */
+    void *match_context;
+
+    /* start offset. */
     off_t offset;
+
+    /* pointer to next result in list */
     struct cli_ac_result *next;
 };
 
@@ -168,7 +172,25 @@ cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *
 cl_error_t cli_ac_chkmacro(struct cli_matcher *root, struct cli_ac_data *data, unsigned lsigid1);
 int cli_ac_chklsig(const char *expr, const char *end, uint32_t *lsigcnt, unsigned int *cnt, uint64_t *ids, unsigned int parse_only);
 void cli_ac_freedata(struct cli_ac_data *data);
-cl_error_t cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, void **customdata, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t offset, cli_file_t ftype, struct cli_matched_type **ftoffset, unsigned int mode, cli_ctx *ctx);
+
+/**
+ * @brief Given a matcher root, and match data struct in which to store the results, match a buffer against the AC trie.
+ *
+ * @param buffer                The buffer to match against.
+ * @param length                The length of the buffer.
+ * @param[out] match_context    (optional) If a match is found, the virname of the match is stored here.
+ * @param[out] res              (optional) If one or more matches are found, a list containing each match is stored here.
+ * @param root                  The root storing all pattern matching data. I.e. "the database in memory."
+ * @param mdata                 Match result data
+ * @param offset                The offset of the buffer in the file being scanned.
+ * @param ftype                 The file type of the file being scanned.
+ * @param[out] ftoffset         (optional) If one or more *file type* matches are found, a list containing each match is stored here.
+ * @param mode                  The mode of the scan (e.g. AC_SCAN_VIR or AC_SCAN_FT)
+ * @param ctx                   The cli_ctx of the scan.
+ * @return cl_error_t
+ */
+cl_error_t cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, void **match_context, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t offset, cli_file_t ftype, struct cli_matched_type **ftoffset, unsigned int mode, cli_ctx *ctx);
+
 cl_error_t cli_ac_buildtrie(struct cli_matcher *root);
 cl_error_t cli_ac_init(struct cli_matcher *root, uint8_t mindepth, uint8_t maxdepth, uint8_t dconf_prefiltering);
 cl_error_t cli_ac_caloff(const struct cli_matcher *root, struct cli_ac_data *data, const struct cli_target_info *info);

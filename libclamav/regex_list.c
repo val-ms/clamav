@@ -263,7 +263,7 @@ cl_error_t regex_list_match(struct regex_matcher *matcher, char *real_url, const
     //    return CL_SUCCESS;
     //}
 
-    rc = cli_ac_scanbuff((const unsigned char *)bufrev, buffer_len, NULL, (void *)&regex, &res, &matcher->suffixes, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+    rc = cli_ac_scanbuff((const unsigned char *)bufrev, buffer_len, (void *)&regex, &res, &matcher->suffixes, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
     free(bufrev);
     cli_ac_freedata(&mdata);
 
@@ -275,7 +275,7 @@ cl_error_t regex_list_match(struct regex_matcher *matcher, char *real_url, const
             regex = matcher->suffix_regexes[root].head;
             root  = 0;
         } else {
-            regex = res->customdata;
+            regex = (struct regex_list *)res->match_context;
         }
         while (!rc && regex) {
             /* loop over multiple regexes corresponding to
@@ -713,8 +713,7 @@ static cl_error_t add_newsuffix(struct regex_matcher *matcher, struct regex_list
         new->pattern[i] = suffix[i]; /*new->pattern is short int* */
     }
 
-    new->customdata = info;
-    new->virname    = NULL;
+    new->match_context = (void *)info;
     if ((ret = cli_ac_addpatt(root, new))) {
         goto done;
     }

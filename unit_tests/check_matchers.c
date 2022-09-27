@@ -232,7 +232,7 @@ START_TEST(test_ac_scanbuff)
 
     ctx.options->general &= ~CL_SCAN_GENERAL_ALLMATCHES; /* make sure all-match is disabled */
     for (i = 0; ac_testdata[i].data; i++) {
-        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), (void **)&virname, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == CL_VIRUS, "cli_ac_scanbuff() failed for %s", ac_testdata[i].virname);
         ck_assert_msg(!strncmp(virname, ac_testdata[i].virname, strlen(ac_testdata[i].virname)), "Dataset %u matched with %s", i, virname);
 
@@ -275,7 +275,7 @@ START_TEST(test_ac_scanbuff_allscan)
 
     ctx.options->general |= CL_SCAN_GENERAL_ALLMATCHES; /* enable all-match */
     for (i = 0; ac_testdata[i].data; i++) {
-        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), (void **)&virname, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == CL_VIRUS, "cli_ac_scanbuff() failed for %s", ac_testdata[i].virname);
         ck_assert_msg(!strncmp(virname, ac_testdata[i].virname, strlen(ac_testdata[i].virname)), "Dataset %u matched with %s", i, virname);
 
@@ -327,7 +327,7 @@ START_TEST(test_ac_scanbuff_ex)
 
     ctx.options->general &= ~CL_SCAN_GENERAL_ALLMATCHES; /* make sure all-match is disabled */
     for (i = 0; ac_sigopts_testdata[i].data; i++) {
-        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, (void **)&virname, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == ac_sigopts_testdata[i].expected_result, "[ac_ex] cli_ac_scanbuff() failed for %s (%d != %d)", ac_sigopts_testdata[i].virname, ret, ac_sigopts_testdata[i].expected_result);
         if (ac_sigopts_testdata[i].expected_result == CL_VIRUS)
             ck_assert_msg(!strncmp(virname, ac_sigopts_testdata[i].virname, strlen(ac_sigopts_testdata[i].virname)), "[ac_ex] Dataset %u matched with %s", i, virname);
@@ -372,7 +372,7 @@ START_TEST(test_ac_scanbuff_allscan_ex)
     for (i = 0; ac_sigopts_testdata[i].data; i++) {
         cl_error_t verdict = CL_CLEAN;
 
-        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, (void **)&virname, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == ac_sigopts_testdata[i].expected_result, "[ac_ex] cli_ac_scanbuff() failed for %s (%d != %d)", ac_sigopts_testdata[i].virname, ret, ac_sigopts_testdata[i].expected_result);
         if (ac_sigopts_testdata[i].expected_result == CL_VIRUS)
             ck_assert_msg(!strncmp(virname, ac_sigopts_testdata[i].virname, strlen(ac_sigopts_testdata[i].virname)), "[ac_ex] Dataset %u matched with %s", i, virname);

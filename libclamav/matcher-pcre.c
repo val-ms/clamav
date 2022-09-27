@@ -729,11 +729,10 @@ cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const 
                             ret = CL_EMEM;
                             break;
                         }
-                        newres->virname    = "test";
-                        newres->customdata = NULL; /* get value? */
-                        newres->next       = *res;
-                        newres->offset     = adjbuffer + p_res.match[0];
-                        *res               = newres;
+                        newres->match_context = "test";
+                        newres->next          = *res;
+                        newres->offset        = adjbuffer + p_res.match[0];
+                        *res                  = newres;
                     } else {
                         ret = CL_VIRUS;
 

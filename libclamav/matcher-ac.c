@@ -689,10 +689,10 @@ void cli_ac_free(struct cli_matcher *root)
         patt = root->ac_pattable[i];
         MPOOL_FREE(root->mempool, patt->prefix ? patt->prefix : patt->pattern);
         if (!(patt->lsigid[0] == 1)) {
-            /* Don't free the virname for patterns lsigs (normal or yara).
+            /* Don't free the virname (match_context) for patterns lsigs (normal or yara).
                For lsigs, we store the virname in lsig->virname, not in each ac-pattern.
                TODO: never store the virname in the ac pattern and only store it per-signature, not per-pattern. */
-            MPOOL_FREE(root->mempool, patt->virname);
+            MPOOL_FREE(root->mempool, patt->match_context);
         }
         if (patt->special) {
             mpool_ac_free_special(root->mempool, patt);
@@ -1542,7 +1542,7 @@ cl_error_t cli_ac_caloff(const struct cli_matcher *root, struct cli_ac_data *dat
             } else {
                 ret = matcher_calculate_relative_offsets(info, patt->offset_data, &data->offset[patt->offset_data->offset_min], &data->offset[patt->offset_data->offset_max]);
                 if (CL_SUCCESS != ret) {
-                    cli_errmsg("cli_ac_caloff: Can't calculate relative offset in signature for %s\n", patt->virname);
+                    cli_errmsg("cli_ac_caloff: Can't calculate relative offset in signature for %s\n", (const char *)patt->match_context);
                     return ret;
                 }
 
@@ -1792,8 +1792,7 @@ cl_error_t cli_ac_chkmacro(struct cli_matcher *root, struct cli_ac_data *data, u
 cl_error_t cli_ac_scanbuff(
     const unsigned char *buffer,
     uint32_t length,
-    const char **virname,
-    void **customdata,
+    void **match_context,
     struct cli_ac_result **res,
     const struct cli_matcher *root,
     struct cli_ac_data *mdata,
@@ -2014,7 +2013,7 @@ cl_error_t cli_ac_scanbuff(
                                     if ((pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) &&
                                         (pt->rtype == CL_TYPE_ANY || ftype == pt->rtype)) {
 
-                                        cli_dbgmsg("Matched signature for file type %s\n", pt->virname);
+                                        cli_dbgmsg("Matched signature for file type %s\n", (const char *)pt->match_context);
                                         type = pt->type;
                                         if ((ftoffset != NULL) &&
                                             ((*ftoffset == NULL) || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && (type >= CL_TYPE_SFX || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP || ftype == CL_TYPE_MSOLE2) && type == CL_TYPE_MSEXE))) {
@@ -2046,25 +2045,22 @@ cl_error_t cli_ac_scanbuff(
                                             cli_errmsg("cli_ac_scanbuff: Can't allocate memory for newres %lu\n", (unsigned long)sizeof(struct cli_ac_result));
                                             return CL_EMEM;
                                         }
-                                        newres->virname    = pt->virname;
-                                        newres->customdata = pt->customdata;
-                                        newres->next       = *res;
-                                        newres->offset     = (off_t)offmatrix[pt->parts - 1][1];
-                                        *res               = newres;
+                                        newres->match_context = pt->match_context;
+                                        newres->next          = *res;
+                                        newres->offset        = (off_t)offmatrix[pt->parts - 1][1];
+                                        *res                  = newres;
 
                                         ptN = ptN->next_same;
                                         continue;
                                     } else {
                                         if (ctx && SCAN_ALLMATCHES) {
-                                            ret = cli_append_virus(ctx, (const char *)pt->virname);
+                                            ret = cli_append_virus(ctx, (const char *)pt->match_context);
                                             if (ret == CL_VIRUS) {
                                                 viruses_found = 1;
                                             }
                                         }
-                                        if (virname)
-                                            *virname = pt->virname;
-                                        if (customdata)
-                                            *customdata = pt->customdata;
+                                        if (match_context)
+                                            *match_context = pt->match_context;
                                         if (!ctx || !SCAN_ALLMATCHES)
                                             return CL_VIRUS;
                                         ptN = ptN->next_same;
@@ -2081,7 +2077,7 @@ cl_error_t cli_ac_scanbuff(
                                 if ((pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) &&
                                     (pt->rtype == CL_TYPE_ANY || ftype == pt->rtype)) {
 
-                                    cli_dbgmsg("Matched signature for file type %s at %u\n", pt->virname, realoff);
+                                    cli_dbgmsg("Matched signature for file type %s at %u\n", (const char *)pt->match_context, realoff);
                                     type = pt->type;
                                     if ((ftoffset != NULL) &&
                                         ((*ftoffset == NULL) || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && (type == CL_TYPE_MBR || type >= CL_TYPE_SFX || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP || ftype == CL_TYPE_MSOLE2) && type == CL_TYPE_MSEXE))) {
@@ -2105,27 +2101,23 @@ cl_error_t cli_ac_scanbuff(
                                         cli_errmsg("cli_ac_scanbuff: Can't allocate memory for newres %lu\n", (unsigned long)sizeof(struct cli_ac_result));
                                         return CL_EMEM;
                                     }
-                                    newres->virname    = pt->virname;
-                                    newres->customdata = pt->customdata;
-                                    newres->offset     = (off_t)realoff;
-                                    newres->next       = *res;
-                                    *res               = newres;
+                                    newres->match_context = pt->match_context;
+                                    newres->offset        = (off_t)realoff;
+                                    newres->next          = *res;
+                                    *res                  = newres;
 
                                     ptN = ptN->next_same;
                                     continue;
                                 } else {
                                     if (ctx && SCAN_ALLMATCHES) {
-                                        ret = cli_append_virus(ctx, (const char *)pt->virname);
+                                        ret = cli_append_virus(ctx, (const char *)pt->match_context);
                                         if (ret == CL_VIRUS) {
                                             viruses_found = 1;
                                         }
                                     }
 
-                                    if (virname)
-                                        *virname = pt->virname;
-
-                                    if (customdata)
-                                        *customdata = pt->customdata;
+                                    if (match_context)
+                                        *match_context = pt->match_context;
 
                                     if (!ctx || !SCAN_ALLMATCHES)
                                         return CL_VIRUS;
@@ -2643,14 +2635,13 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
     if ((new = (struct cli_ac_patt *)MPOOL_CALLOC(root->mempool, 1, sizeof(struct cli_ac_patt))) == NULL)
         return CL_EMEM;
 
-    new->rtype      = rtype;
-    new->type       = type;
-    new->sigid      = sigid;
-    new->parts      = parts;
-    new->partno     = partno;
-    new->mindist    = mindist;
-    new->maxdist    = maxdist;
-    new->customdata = NULL;
+    new->rtype   = rtype;
+    new->type    = type;
+    new->sigid   = sigid;
+    new->parts   = parts;
+    new->partno  = partno;
+    new->mindist = mindist;
+    new->maxdist = maxdist;
     new->ch[0] |= CLI_MATCH_IGNORE;
     new->ch[1] |= CLI_MATCH_IGNORE;
     if (lsigid) {
@@ -2959,7 +2950,7 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
     /* TODO - sigopts affect on filters? */
     if (root->filter) {
         /* so that we can show meaningful messages */
-        new->virname = (char *)virname;
+        new->match_context = (void *)virname;
         if (filter_add_acpatt(root->filter, new) == -1) {
             cli_warnmsg("cli_ac_addsig: cannot use filter for trie\n");
             MPOOL_FREE(root->mempool, root->filter);
@@ -3104,7 +3095,7 @@ cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const ch
             return CL_EMEM;
         }
 
-        new->virname = virname_copy;
+        new->match_context = (void *)virname_copy;
     }
 
     ret = matcher_decode_offset_string(root, offset, root->type, &new->offset_data);

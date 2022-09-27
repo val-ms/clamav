@@ -453,7 +453,7 @@ int filter_add_acpatt(struct filter *m, const struct cli_ac_patt *pat)
     if (i == j) {
         /* all static, use add_static it has better heuristics for this
          * case */
-        return filter_add_static(m, patc, j, pat->virname);
+        return filter_add_static(m, patc, j, (const char *)pat->match_context);
     }
     cli_perf_log_count(TRIE_ORIG_LEN, j > 8 ? 8 : j);
     i = 0;
@@ -533,9 +533,9 @@ int filter_add_acpatt(struct filter *m, const struct cli_ac_patt *pat)
     j = speci;
     if (j < 2) {
         if (stop)
-            cli_warnmsg("Don't know how to create filter for: %s\n", pat->virname);
+            cli_warnmsg("Don't know how to create filter for: %s\n", (const char *)pat->match_context);
         else
-            cli_warnmsg("Subpattern too short: %s\n", pat->virname);
+            cli_warnmsg("Subpattern too short: %s\n", (const char *)pat->match_context);
         return -1;
     }
 
@@ -664,15 +664,15 @@ int filter_add_acpatt(struct filter *m, const struct cli_ac_patt *pat)
     }
 
     if (best_score <= -0x7fffffff) {
-        cli_warnmsg("filter rejecting %s due to very bad score: %ld\n", pat->virname, (long)best_score);
+        cli_warnmsg("filter rejecting %s due to very bad score: %ld\n", (const char *)pat->match_context, (long)best_score);
         return -1;
     }
     if (choices_cnt == 0) {
-        cli_warnmsg("filter rejecting %s because there are no viable choices", pat->virname);
+        cli_warnmsg("filter rejecting %s because there are no viable choices", (const char *)pat->match_context);
         return -1;
     }
     assert(best_score_len >= 2);
-    detailed_dbg("filter %s score: %ld, %u (+ %u)\n", pat->virname, (long)best_score, best_score_i, best_score_len);
+    detailed_dbg("filter %s score: %ld, %u (+ %u)\n", (const char *)pat->match_context, (long)best_score, best_score_i, best_score_len);
     /* Shift-Or like preprocessing */
     assert(1 < best_score_len);
     for (i = 0; i < best_score_len - 1; i++) {
@@ -686,7 +686,7 @@ int filter_add_acpatt(struct filter *m, const struct cli_ac_patt *pat)
                 SPEC_FOREACH(spec0, k0, spec1, k1)
                 {
                     if (!cc0 && !cc1 && !i) {
-                        detailed_dbg("filter (warning): subsignature begins with zero: %s\n", pat->virname);
+                        detailed_dbg("filter (warning): subsignature begins with zero: %s\n", (const char *)pat->match_context);
                     }
                     filter_set_atpos(m, i, a);
                 }
@@ -702,7 +702,7 @@ int filter_add_acpatt(struct filter *m, const struct cli_ac_patt *pat)
                 SPEC_FOREACH(spec0, k0, spec1, k1)
                 {
                     if (!cc0 && !cc1) {
-                        detailed_dbg("filter (warning): subsignature ends with zero: %s\n", pat->virname);
+                        detailed_dbg("filter (warning): subsignature ends with zero: %s\n", (const char *)pat->match_context);
                     }
                     filter_set_end(m, j, a);
                 }

@@ -1169,6 +1169,48 @@ static int build(const struct optstruct *opts)
     return ret;
 }
 
+static int convert_script_to_cdiff(const struct optstruct *opts)
+{
+    int status = 0;
+    char builder[33];
+    char *pt;
+
+    if (!optget(opts, "server")->enabled) {
+        mprintf(LOGG_ERROR, "build: --server is required for --script-to-cdiff\n");
+        status = -1;
+        goto done;
+    }
+
+    // Get the builder name.
+    if (NULL != (pt = getenv("SIGNDUSER"))) {
+        // Found builder name using SIGNDUSER environment variable
+        strncpy(builder, pt, sizeof(builder));
+        builder[sizeof(builder) - 1] = '\0';
+
+    } else {
+        // Ask user to type in the builder name.
+        mprintf(LOGG_INFO, "Builder name: ");
+
+        if (EOF == scanf("%32s", builder)) {
+            mprintf(LOGG_ERROR, "build: Can't get builder name\n");
+            status = -1;
+            goto done;
+        }
+    }
+
+    if (!script2cdiff(optget(opts, "script-to-cdiff")->strarg,
+                      builder,
+                      optget(opts, "server")->strarg)) {
+        // Failed to create cdiff.
+        status = -1;
+        goto done;
+    }
+
+done:
+
+    return status;
+}
+
 static int unpack(const struct optstruct *opts)
 {
     char name[512], *dbdir;
@@ -3455,6 +3497,7 @@ static void help(void)
     mprintf(LOGG_INFO, "                                           cdiff format\n");
     mprintf(LOGG_INFO, "    --run-cdiff=FILE       -r FILE         Execute update script FILE in cwd\n");
     mprintf(LOGG_INFO, "    --verify-cdiff=DIFF CVD/CLD            Verify DIFF against CVD/CLD\n");
+    mprintf(LOGG_INFO, "    --script-to-cdiff=DIFF                 Create a signed .cdiff file from a .script file\n");
     mprintf(LOGG_INFO, "\n");
 
     return;
@@ -3548,6 +3591,8 @@ int main(int argc, char **argv)
         ret = dumpcerts(opts);
     else if (optget(opts, "run-cdiff")->enabled)
         ret = rundiff(opts);
+    else if (optget(opts, "script-to-cdiff")->enabled)
+        ret = convert_script_to_cdiff(opts);
     else if (optget(opts, "verify-cdiff")->enabled) {
         if (!opts->filename) {
             mprintf(LOGG_ERROR, "--verify-cdiff requires two arguments\n");

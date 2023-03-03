@@ -28,3 +28,4 @@ pub mod ffi_util;
 pub mod fuzzy_hash;
 pub mod logging;
 pub mod util;
+pub mod xz_iface;

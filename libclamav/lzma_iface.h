@@ -43,6 +43,7 @@ struct CLI_LZMA {
     unsigned char *next_out;
     SizeT avail_in;
     SizeT avail_out;
+    SizeT last_out;
 };
 
 struct stream_state {

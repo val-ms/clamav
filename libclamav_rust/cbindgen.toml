@@ -28,6 +28,8 @@ include = [
   "frs_error::ffierror_fmt",
   "frs_error::ffierror_free",
   "logging::clrs_eprint",
+  "xz_iface::clrs_lzma_decode",
+  "xz_iface::clrs_free_buffer",
 ]
 
 # prefix = "CAPI_"

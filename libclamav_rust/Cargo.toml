@@ -16,6 +16,7 @@ image = "0.24"
 rustdct = "0.7"
 transpose = "0.2"
 num-traits = "0.2"
+xz2 = "0.1.7"
 
 [lib]
 crate-type = ["staticlib"]

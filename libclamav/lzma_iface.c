@@ -31,6 +31,8 @@
 #include "clamav.h"
 #include "lzma_iface.h"
 
+#include "clamav_rust.h"
+
 void *__lzma_wrap_alloc(void *unused, size_t size)
 {
     UNUSEDPARAM(unused);
@@ -50,7 +52,7 @@ void __lzma_wrap_free(void *unused, void *freeme)
 }
 static ISzAlloc g_Alloc = {__lzma_wrap_alloc, __lzma_wrap_free};
 
-static unsigned char lzma_getbyte(struct CLI_LZMA *L, int *fail)
+/*static unsigned char lzma_getbyte(struct CLI_LZMA *L, int *fail)
 {
     unsigned char c;
     if (!L->next_in || !L->avail_in) {
@@ -62,14 +64,14 @@ static unsigned char lzma_getbyte(struct CLI_LZMA *L, int *fail)
     L->next_in++;
     L->avail_in--;
     return c;
-}
+}*/
 
 int cli_LzmaInit(struct CLI_LZMA *L, uint64_t size_override)
 {
     int fail;
 
     if (!L->init) {
-        L->p_cnt = LZMA_PROPS_SIZE;
+        //L->p_cnt = LZMA_PROPS_SIZE;
         if (size_override) {
             L->s_cnt = 0;
             L->usize = size_override;
@@ -83,23 +85,23 @@ int cli_LzmaInit(struct CLI_LZMA *L, uint64_t size_override)
 
     if (L->freeme) return LZMA_RESULT_OK;
 
-    while (L->p_cnt) {
+    /*while (L->p_cnt) {
         L->header[LZMA_PROPS_SIZE - L->p_cnt] = lzma_getbyte(L, &fail);
         if (fail) return LZMA_RESULT_OK;
         L->p_cnt--;
-    }
+    }*/
 
-    while (L->s_cnt) {
+    /*while (L->s_cnt) {
         uint64_t c = (uint64_t)lzma_getbyte(L, &fail);
         if (fail) return LZMA_RESULT_OK;
         L->usize |= c << (8 * (8 - L->s_cnt));
         L->s_cnt--;
-    }
+    }*/
 
-    LzmaDec_Construct(&L->state);
+    /*LzmaDec_Construct(&L->state);
     if (LzmaDec_Allocate(&L->state, L->header, LZMA_PROPS_SIZE, &g_Alloc) != SZ_OK)
         return LZMA_RESULT_DATA_ERROR;
-    LzmaDec_Init(&L->state);
+    LzmaDec_Init(&L->state);*/
 
     L->freeme = 1;
     return LZMA_RESULT_OK;
@@ -115,29 +117,38 @@ void cli_LzmaShutdown(struct CLI_LZMA *L)
 int cli_LzmaDecode(struct CLI_LZMA *L)
 {
     SRes res;
-    SizeT outbytes, inbytes;
+    SizeT inbytes;
     ELzmaStatus status;
     ELzmaFinishMode finish;
 
     if (!L->freeme) return cli_LzmaInit(L, 0);
 
     inbytes = L->avail_in;
-    if (~L->usize && L->avail_out > L->usize) {
+    /*if (~L->usize && L->avail_out > L->usize) {
         outbytes = L->usize;
         finish   = LZMA_FINISH_END;
     } else {
         outbytes = L->avail_out;
         finish   = LZMA_FINISH_ANY;
+    }*/
+    //res = LzmaDec_DecodeToBuf(&L->state, L->next_out, &outbytes, L->next_in, &inbytes, finish, &status);
+    //TODO: find better way to pass up status result after decode
+    L->last_out = clrs_lzma_decode(&L->next_in, inbytes, L->next_out);
+    if (L->last_out == 0) {
+        cli_dbgmsg("cli_LzmaDecode: decode did not produce any output\n");
+        return LZMA_RESULT_DATA_ERROR;
+    } else if (L->last_out < 0) {
+        cli_dbgmsg("cli_LzmaDecode: decode failed with error %d\n", L->last_out);
+        return LZMA_RESULT_DATA_ERROR;
     }
-    res = LzmaDec_DecodeToBuf(&L->state, L->next_out, &outbytes, L->next_in, &inbytes, finish, &status);
     L->avail_in -= inbytes;
     L->next_in += inbytes;
-    L->avail_out -= outbytes;
-    L->next_out += outbytes;
-    if (~L->usize) L->usize -= outbytes;
-    if (res != SZ_OK)
+    L->avail_out -= L->last_out;
+    L->next_out += L->last_out;
+    //if (~L->usize) L->usize -= outbytes;
+    /*if (res != SZ_OK)
         return LZMA_RESULT_DATA_ERROR;
     if (!L->usize || status == LZMA_STATUS_FINISHED_WITH_MARK)
-        return LZMA_STREAM_END;
+        return LZMA_STREAM_END;*/
     return LZMA_RESULT_OK;
 }

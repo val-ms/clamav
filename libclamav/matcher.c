@@ -265,17 +265,16 @@ cl_error_t cli_scan_buff(const unsigned char *buffer, uint32_t length, uint32_t 
 {
     cl_error_t ret = CL_CLEAN;
     unsigned int i = 0, j = 0;
-    struct cli_ac_data matcher_data;
-    struct cli_matcher *generic_ac_root, *target_ac_root = NULL;
-    const char *virname            = NULL;
-    const struct cl_engine *engine = ctx->engine;
+    struct cli_matcher *generic_ac_root      = ctx->engine->root[TARGET_GENERIC];
+    struct cli_matcher *target_ac_root       = NULL;
+    struct cli_ac_data *generic_matcher_data = &ctx->mdata[TARGET_GENERIC];
+    struct cli_ac_data *target_matcher_data  = NULL;
+    const char *virname                      = NULL;
 
-    if (!engine) {
+    if (ctx->engine == NULL) {
         cli_errmsg("cli_scan_buff: engine == NULL\n");
         return CL_ENULLARG;
     }
-
-    generic_ac_root = engine->root[0]; /* generic signatures */
 
     if (ftype != CL_TYPE_ANY) {
         // Identify the target type, to find the matcher root for that target.
@@ -284,7 +283,8 @@ cl_error_t cli_scan_buff(const unsigned char *buffer, uint32_t length, uint32_t 
             for (j = 0; j < cli_mtargets[i].target_count; ++j) {
                 if (cli_mtargets[i].target[j] == ftype) {
                     // Identified the target type, now get the matcher root for that target.
-                    target_ac_root = ctx->engine->root[i];
+                    target_ac_root      = ctx->engine->root[i];
+                    target_matcher_data = &ctx->mdata[i];
                     break; // Break out of inner loop
                 }
             }
@@ -297,21 +297,15 @@ cl_error_t cli_scan_buff(const unsigned char *buffer, uint32_t length, uint32_t 
 
         if (!acdata) {
             // no ac matcher data was provided, so we need to initialize our own.
-            ret = cli_ac_initdata(&matcher_data, target_ac_root->ac_partsigs, target_ac_root->ac_lsigs, target_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
+            ret = cli_ac_initdata(target_matcher_data, target_ac_root->ac_partsigs, target_ac_root->ac_lsigs, target_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
             if (CL_SUCCESS != ret) {
                 return ret;
             }
         }
 
         ret = matcher_run(target_ac_root, buffer, length, &virname,
-                          acdata ? (acdata[0]) : (&matcher_data),
+                          acdata ? (acdata[0]) : (target_matcher_data),
                           offset, NULL, ftype, NULL, AC_SCAN_VIR, PCRE_SCAN_BUFF, NULL, ctx->fmap, NULL, NULL, ctx);
-
-        if (!acdata) {
-            // no longer need our AC local matcher data (if using)
-            cli_ac_freedata(&matcher_data);
-        }
-
         if (ret == CL_EMEM || ret == CL_VIRUS) {
             return ret;
         }
@@ -322,20 +316,15 @@ cl_error_t cli_scan_buff(const unsigned char *buffer, uint32_t length, uint32_t 
 
     if (!acdata) {
         // no ac matcher data was provided, so we need to initialize our own.
-        ret = cli_ac_initdata(&matcher_data, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
+        ret = cli_ac_initdata(generic_matcher_data, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
         if (CL_SUCCESS != ret) {
             return ret;
         }
     }
 
     ret = matcher_run(generic_ac_root, buffer, length, &virname,
-                      acdata ? (acdata[1]) : (&matcher_data),
+                      acdata ? (acdata[1]) : (generic_matcher_data),
                       offset, NULL, ftype, NULL, AC_SCAN_VIR, PCRE_SCAN_BUFF, NULL, ctx->fmap, NULL, NULL, ctx);
-
-    if (!acdata) {
-        // no longer need our AC local matcher data (if using)
-        cli_ac_freedata(&matcher_data);
-    }
 
     return ret;
 }
@@ -1047,11 +1036,9 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
     unsigned int i = 0, j = 0;
     uint32_t maxpatlen, bytes, offset = 0;
 
-    struct cli_ac_data generic_ac_data;
-    bool gdata_initialized = false;
+    struct cli_ac_data *generic_ac_data = &ctx->mdata[TARGET_GENERIC];
 
-    struct cli_ac_data target_ac_data;
-    bool tdata_initialized = false;
+    struct cli_ac_data *target_ac_data = NULL;
 
     struct cli_bm_off bm_offsets_table;
     bool bm_offsets_table_initialized = false;
@@ -1100,7 +1087,7 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
     }
 
     if (!filetype_only) {
-        generic_ac_root = ctx->engine->root[0]; /* generic signatures */
+        generic_ac_root = ctx->engine->root[TARGET_GENERIC]; /* generic signatures */
     }
 
     if (ftype != CL_TYPE_ANY) {
@@ -1111,6 +1098,7 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
                 if (cli_mtargets[i].target[j] == ftype) {
                     // Identified the target type, now get the matcher root for that target.
                     target_ac_root = ctx->engine->root[i];
+                    target_ac_data = &ctx->mdata[i];
                     break; // Break out of inner loop
                 }
             }
@@ -1183,14 +1171,13 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
         /* If we're not doing a filetype-only scan, so we definitely need to include generic signatures.
            So initialize the ac data for the generic signatures root. */
 
-        ret = cli_ac_initdata(&generic_ac_data, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
+        ret = cli_ac_initdata(generic_ac_data, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
         if (CL_SUCCESS != ret) {
             goto done;
         }
-        gdata_initialized = true;
 
         /* Recalculate the relative offsets in ac sigs (e.g. those that are based on pe/elf/macho section start/end). */
-        ret = cli_ac_caloff(generic_ac_root, &generic_ac_data, &info);
+        ret = cli_ac_caloff(generic_ac_root, generic_ac_data, &info);
         if (CL_SUCCESS != ret) {
             goto done;
         }
@@ -1208,14 +1195,13 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
         /* We have to match against target-specific signatures.
            So initialize the ac data for the target-specific signatures root. */
 
-        ret = cli_ac_initdata(&target_ac_data, target_ac_root->ac_partsigs, target_ac_root->ac_lsigs, target_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
+        ret = cli_ac_initdata(target_ac_data, target_ac_root->ac_partsigs, target_ac_root->ac_lsigs, target_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
         if (CL_SUCCESS != ret) {
             goto done;
         }
-        tdata_initialized = true;
 
         /* Recalculate the relative offsets in ac sigs (e.g. those that are based on pe/elf/macho section start/end). */
-        ret = cli_ac_caloff(target_ac_root, &target_ac_data, &info);
+        ret = cli_ac_caloff(target_ac_root, target_ac_data, &info);
         if (CL_SUCCESS != ret) {
             goto done;
         }
@@ -1300,7 +1286,7 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
         if (target_ac_root) {
             const char *virname = NULL;
 
-            ret = matcher_run(target_ac_root, buff, bytes, &virname, &target_ac_data, offset,
+            ret = matcher_run(target_ac_root, buff, bytes, &virname, target_ac_data, offset,
                               &info, ftype, ftoffset, acmode, PCRE_SCAN_FMAP, acres, ctx->fmap,
                               bm_offsets_table_initialized ? &bm_offsets_table : NULL,
                               &target_pcre_offsets_table, ctx);
@@ -1312,7 +1298,7 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
         if (!filetype_only) {
             const char *virname = NULL;
 
-            ret = matcher_run(generic_ac_root, buff, bytes, &virname, &generic_ac_data, offset,
+            ret = matcher_run(generic_ac_root, buff, bytes, &virname, generic_ac_data, offset,
                               &info, ftype, ftoffset, acmode, PCRE_SCAN_FMAP, acres, ctx->fmap,
                               NULL,
                               &generic_pcre_offsets_table, ctx);
@@ -1414,14 +1400,14 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
     // Evalute for the target-specific signature AC matches.
     if (NULL != target_ac_root) {
         if (ret != CL_VIRUS) {
-            ret = cli_exp_eval(ctx, target_ac_root, &target_ac_data, &info, (const char *)refhash);
+            ret = cli_exp_eval(ctx, target_ac_root, target_ac_data, &info, (const char *)refhash);
         }
     }
 
     // Evalute for the generic signature AC matches.
     if (NULL != generic_ac_root) {
         if (ret != CL_VIRUS) {
-            ret = cli_exp_eval(ctx, generic_ac_root, &generic_ac_data, &info, (const char *)refhash);
+            ret = cli_exp_eval(ctx, generic_ac_root, generic_ac_data, &info, (const char *)refhash);
         }
     }
 
@@ -1434,13 +1420,6 @@ done:
     }
     if (NULL != sha256ctx) {
         cl_hash_destroy(sha256ctx);
-    }
-
-    if (gdata_initialized) {
-        cli_ac_freedata(&generic_ac_data);
-    }
-    if (tdata_initialized) {
-        cli_ac_freedata(&target_ac_data);
     }
 
     if (generic_pcre_offsets_table_initialized) {

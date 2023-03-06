@@ -158,7 +158,7 @@ cl_error_t regex_list_match(struct regex_matcher *matcher, char *real_url, const
     cl_error_t rc = CL_SUCCESS;
     int filter_search_rc = 0;
     int root;
-    struct cli_ac_data mdata;
+    struct cli_ac_data matcher_data = {0};
     struct cli_ac_result *res = NULL;
 
     if (NULL == matcher) {
@@ -221,7 +221,7 @@ cl_error_t regex_list_match(struct regex_matcher *matcher, char *real_url, const
     buffer[buffer_len]     = 0;
     cli_dbgmsg("Looking up in regex_list: %s\n", buffer);
 
-    if (CL_SUCCESS != (rc = cli_ac_initdata(&mdata, 0, 0, 0, CLI_DEFAULT_AC_TRACKLEN)))
+    if (CL_SUCCESS != (rc = cli_ac_initdata(&matcher_data, 0, 0, 0, CLI_DEFAULT_AC_TRACKLEN)))
         return rc;
 
     bufrev = cli_strdup(buffer);
@@ -240,9 +240,9 @@ cl_error_t regex_list_match(struct regex_matcher *matcher, char *real_url, const
        return CL_SUCCESS;
     }
 
-    rc = cli_ac_scanbuff((const unsigned char *)bufrev, buffer_len, NULL, (void *)&regex, &res, &matcher->suffixes, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+    rc = cli_ac_scanbuff((const unsigned char *)bufrev, buffer_len, NULL, (void *)&regex, &res, &matcher->suffixes, &matcher_data, 0, 0, NULL, AC_SCAN_VIR, NULL);
     free(bufrev);
-    cli_ac_freedata(&mdata);
+    cli_ac_freedata(&matcher_data);
 
     rc   = CL_SUCCESS;
     root = matcher->root_regex_idx;

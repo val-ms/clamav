@@ -1489,29 +1489,26 @@ static cl_error_t cli_scanszdd(cli_ctx *ctx)
 
 static cl_error_t vba_scandata(const unsigned char *data, size_t len, cli_ctx *ctx)
 {
-    cl_error_t ret                      = CL_SUCCESS;
-    struct cli_matcher *generic_ac_root = ctx->engine->root[0];
-    struct cli_matcher *target_ac_root  = ctx->engine->root[2];
-    struct cli_ac_data gmdata, tmdata;
-    bool gmdata_initialized = false;
-    bool tmdata_initialized = false;
+    cl_error_t ret                           = CL_SUCCESS;
+    struct cli_matcher *generic_ac_root      = ctx->engine->root[TARGET_GENERIC];
+    struct cli_matcher *target_ac_root       = ctx->engine->root[TARGET_OLE2];
+    struct cli_ac_data *generic_matcher_data = &ctx->mdata[TARGET_GENERIC];
+    struct cli_ac_data *target_matcher_data  = &ctx->mdata[TARGET_OLE2];
     struct cli_ac_data *mdata[2];
     bool must_pop_stack = false;
 
     cl_fmap_t *new_map = NULL;
 
-    if ((ret = cli_ac_initdata(&tmdata, target_ac_root->ac_partsigs, target_ac_root->ac_lsigs, target_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))) {
+    if ((ret = cli_ac_initdata(target_matcher_data, target_ac_root->ac_partsigs, target_ac_root->ac_lsigs, target_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))) {
         goto done;
     }
-    tmdata_initialized = true;
 
-    if ((ret = cli_ac_initdata(&gmdata, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))) {
+    if ((ret = cli_ac_initdata(generic_matcher_data, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))) {
         goto done;
     }
-    gmdata_initialized = true;
 
-    mdata[0] = &tmdata;
-    mdata[1] = &gmdata;
+    mdata[0] = target_matcher_data;
+    mdata[1] = generic_matcher_data;
 
     ret = cli_scan_buff(data, len, 0, ctx, CL_TYPE_MSOLE2, mdata);
     if (CL_SUCCESS != ret) {
@@ -1536,12 +1533,12 @@ static cl_error_t vba_scandata(const unsigned char *data, size_t len, cli_ctx *c
 
     must_pop_stack = true;
 
-    ret = cli_exp_eval(ctx, target_ac_root, &tmdata, NULL, NULL);
+    ret = cli_exp_eval(ctx, target_ac_root, target_matcher_data, NULL, NULL);
     if (CL_SUCCESS != ret) {
         goto done;
     }
 
-    ret = cli_exp_eval(ctx, generic_ac_root, &gmdata, NULL, NULL);
+    ret = cli_exp_eval(ctx, generic_ac_root, generic_matcher_data, NULL, NULL);
 
 done:
 
@@ -1551,14 +1548,6 @@ done:
 
     if (NULL != new_map) {
         funmap(new_map);
-    }
-
-    if (tmdata_initialized) {
-        cli_ac_freedata(&tmdata);
-    }
-
-    if (gmdata_initialized) {
-        cli_ac_freedata(&gmdata);
     }
 
     return ret;
@@ -2203,9 +2192,7 @@ static cl_error_t cli_scanscript(cli_ctx *ctx)
     struct cli_matcher *target_ac_root;
     uint32_t maxpatlen, offset = 0;
     struct cli_matcher *generic_ac_root;
-    struct cli_ac_data gmdata, tmdata;
-    int gmdata_initialized = 0;
-    int tmdata_initialized = 0;
+    struct cli_ac_data generic_matcher_data = {0}, target_matcher_data = {0};
     struct cli_ac_data *mdata[2];
     cl_fmap_t *new_map = NULL;
     fmap_t *map;
@@ -2218,8 +2205,8 @@ static cl_error_t cli_scanscript(cli_ctx *ctx)
 
     map             = ctx->fmap;
     curr_len        = map->len;
-    generic_ac_root = ctx->engine->root[0];
-    target_ac_root  = ctx->engine->root[7];
+    generic_ac_root = ctx->engine->root[TARGET_GENERIC];
+    target_ac_root  = ctx->engine->root[TARGET_ASCII];
     maxpatlen       = target_ac_root ? target_ac_root->maxpatlen : 0;
 
     // Initialize info so it's safe to pass to destroy later
@@ -2241,15 +2228,13 @@ static cl_error_t cli_scanscript(cli_ctx *ctx)
     }
     text_normalize_init(&state, normalized, SCANBUFF + maxpatlen);
 
-    if ((ret = cli_ac_initdata(&tmdata, target_ac_root ? target_ac_root->ac_partsigs : 0, target_ac_root ? target_ac_root->ac_lsigs : 0, target_ac_root ? target_ac_root->ac_reloff_num : 0, CLI_DEFAULT_AC_TRACKLEN))) {
+    if ((ret = cli_ac_initdata(&target_matcher_data, target_ac_root ? target_ac_root->ac_partsigs : 0, target_ac_root ? target_ac_root->ac_lsigs : 0, target_ac_root ? target_ac_root->ac_reloff_num : 0, CLI_DEFAULT_AC_TRACKLEN))) {
         goto done;
     }
-    tmdata_initialized = 1;
 
-    if ((ret = cli_ac_initdata(&gmdata, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))) {
+    if ((ret = cli_ac_initdata(&generic_matcher_data, generic_ac_root->ac_partsigs, generic_ac_root->ac_lsigs, generic_ac_root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))) {
         goto done;
     }
-    gmdata_initialized = 1;
 
     /* dump to disk only if explicitly asked to
      * or if necessary to check relative offsets,
@@ -2263,8 +2248,8 @@ static cl_error_t cli_scanscript(cli_ctx *ctx)
             cli_dbgmsg("cli_scanscript: saving normalized file to %s\n", tmpname);
     }
 
-    mdata[0] = &tmdata;
-    mdata[1] = &gmdata;
+    mdata[0] = &target_matcher_data;
+    mdata[1] = &generic_matcher_data;
 
     /* If there's a relative offset in target_ac_root or triggered bytecodes, normalize to file.*/
     if (target_ac_root && (target_ac_root->ac_reloff_num > 0 || target_ac_root->linked_bcs)) {
@@ -2312,7 +2297,7 @@ static cl_error_t cli_scanscript(cli_ctx *ctx)
 
         if (target_ac_root) {
             cli_targetinfo(&info, 7, ctx);
-            ret = cli_ac_caloff(target_ac_root, &tmdata, &info);
+            ret = cli_ac_caloff(target_ac_root, &target_matcher_data, &info);
             if (ret)
                 goto done;
         }
@@ -2353,17 +2338,20 @@ static cl_error_t cli_scanscript(cli_ctx *ctx)
         }
     }
 
-    ret = cli_exp_eval(ctx, target_ac_root, &tmdata, NULL, NULL);
+    ret = cli_exp_eval(ctx, target_ac_root, &target_matcher_data, NULL, NULL);
     if (CL_SUCCESS != ret) {
         goto done;
     }
 
-    ret = cli_exp_eval(ctx, generic_ac_root, &gmdata, NULL, NULL);
+    ret = cli_exp_eval(ctx, generic_ac_root, &generic_matcher_data, NULL, NULL);
     if (CL_SUCCESS != ret) {
         goto done;
     }
 
 done:
+    cli_ac_freedata(&target_matcher_data);
+    cli_ac_freedata(&generic_matcher_data);
+
     if (NULL != new_map) {
         funmap(new_map);
     }
@@ -2372,14 +2360,6 @@ done:
 
     if (NULL != normalized) {
         free(normalized);
-    }
-
-    if (tmdata_initialized) {
-        cli_ac_freedata(&tmdata);
-    }
-
-    if (gmdata_initialized) {
-        cli_ac_freedata(&gmdata);
     }
 
     if (ofd != -1) {
@@ -4298,7 +4278,7 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
      */
     perf_start(ctx, PERFT_FT);
     if ((type == CL_TYPE_ANY) || type == CL_TYPE_PART_ANY) {
-        type = cli_determine_fmap_type(ctx->fmap, ctx->engine, type);
+        type = cli_determine_fmap_type(ctx, type);
     }
     perf_stop(ctx, PERFT_FT);
     if (type == CL_TYPE_ERROR) {
@@ -5330,6 +5310,8 @@ static cl_error_t scan_common(cl_fmap_t *map, const char *filepath, const char *
     time_t current_time;
     struct tm tm_struct;
 
+    size_t i;
+
     if (NULL == map || NULL == scanoptions) {
         return CL_ENULLARG;
     }
@@ -5469,6 +5451,11 @@ static cl_error_t scan_common(cl_fmap_t *map, const char *filepath, const char *
         goto done;
     }
 
+    // Mark each of the matcher targets as uninitialized.
+    for (i = 0; i < CLI_MTARGETS; i++) {
+        ctx.mdata[i].initialized = false;
+    }
+
     status = cli_magic_scan(&ctx, CL_TYPE_ANY);
 
 #if HAVE_JSON
@@ -5506,7 +5493,7 @@ static cl_error_t scan_common(cl_fmap_t *map, const char *filepath, const char *
             /*
              * Run bytecode preclass hook.
              */
-            struct cli_matcher *iroot = ctx.engine->root[13];
+            struct cli_matcher *iroot = ctx.engine->root[TARGET_INTERNAL];
 
             struct cli_bc_ctx *bc_ctx = cli_bytecode_context_alloc();
             if (!bc_ctx) {
@@ -5624,6 +5611,11 @@ static cl_error_t scan_common(cl_fmap_t *map, const char *filepath, const char *
     }
 
 done:
+    // Clean up the matcher targets.
+    for (i = 0; i < CLI_MTARGETS; i++) {
+        cli_ac_freedata(&ctx.mdata[i]);
+    }
+
     // Filter the result from the post-scan hooks and stuff, so we don't propagate non-fatal errors.
     // And to convert CL_VERIFIED -> CL_CLEAN
     (void)result_should_goto_done(&ctx, status, &status);

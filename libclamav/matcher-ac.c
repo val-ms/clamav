@@ -1400,149 +1400,328 @@ inline static int ac_findmatch(const unsigned char *buffer, uint32_t offset, uin
 
 cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t lsigs, uint32_t reloffsigs, uint8_t tracklen)
 {
+    cl_error_t status = CL_ERROR;
     unsigned int i, j;
 
     UNUSEDPARAM(tracklen);
 
     if (!data) {
         cli_errmsg("cli_ac_init: data == NULL\n");
-        return CL_ENULLARG;
+        status = CL_ENULLARG;
+        goto done;
     }
-    memset((void *)data, 0, sizeof(struct cli_ac_data));
 
-    data->reloffsigs = reloffsigs;
-    if (reloffsigs) {
-        data->offset = (uint32_t *)cli_malloc(reloffsigs * 2 * sizeof(uint32_t));
-        if (!data->offset) {
-            cli_errmsg("cli_ac_init: Can't allocate memory for data->offset\n");
-            return CL_EMEM;
+    if (!data->initialized) {
+        // First time using this data structure.
+        // Have to allocate everything...
+
+        data->reloffsigs = reloffsigs;
+        if (reloffsigs > 0) {
+            CLI_MALLOC(
+                data->offset,
+                reloffsigs * 2 * sizeof(uint32_t),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->offset\n");
+                status = CL_EMEM);
         }
-        for (i = 0; i < reloffsigs * 2; i += 2)
+
+        data->partsigs = partsigs;
+        if (partsigs > 0) {
+            CLI_CALLOC(
+                data->offmatrix,
+                partsigs,
+                sizeof(uint32_t **),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->offmatrix\n"),
+                status = CL_EMEM);
+        }
+
+        data->lsigs = lsigs;
+        if (lsigs > 0) {
+            CLI_MALLOC(
+                data->lsigcnt,
+                lsigs * sizeof(uint32_t *),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt\n");
+                status = CL_EMEM);
+
+            CLI_CALLOC(
+                data->lsigcnt[0],
+                lsigs * 64,
+                sizeof(uint32_t),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt[0]\n"),
+                status = CL_EMEM);
+
+            CLI_CALLOC(
+                data->yr_matches,
+                lsigs,
+                sizeof(uint8_t),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->yr_matches\n"),
+                status = CL_EMEM);
+
+            /* subsig offsets */
+            CLI_CALLOC(
+                data->lsig_matches,
+                lsigs,
+                sizeof(struct cli_lsig_matches *),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->lsig_matches\n"),
+                status = CL_EMEM);
+
+            CLI_MALLOC(
+                data->lsigsuboff_last,
+                lsigs * sizeof(uint32_t *),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_last\n");
+                status = CL_EMEM);
+
+            CLI_MALLOC(
+                data->lsigsuboff_first,
+                lsigs * sizeof(uint32_t *),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_first\n");
+                status = CL_EMEM);
+
+            CLI_CALLOC(
+                data->lsigsuboff_last[0],
+                lsigs * 64,
+                sizeof(uint32_t),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_last\n"),
+                status = CL_EMEM);
+
+            CLI_CALLOC(
+                data->lsigsuboff_first[0],
+                lsigs * 64,
+                sizeof(uint32_t),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_first\n"),
+                status = CL_EMEM);
+        }
+
+    } else {
+        // Data structure already initialized.
+        // First, free up the optional things if they're not used this time around-
+        // and then memset some of the stuff to re-initialize...
+
+        if (reloffsigs == 0 && data->offset != NULL) {
+            // no reloffsigs, but we do have an offset array from last time, so free up that offset array
+            free(data->offset);
+            data->offset = NULL;
+
+        } else if (data->reloffsigs != reloffsigs) {
+            // there are reloffsigs, but the number of these do not match what we had last time.
+            // let's realloc the offset array to match the new reality.
+            data->reloffsigs = reloffsigs;
+            CLI_REALLOC(
+                data->offset,
+                reloffsigs * 2 * sizeof(uint32_t),
+                cli_errmsg("cli_ac_init: Can't allocate memory for data->offset\n"),
+                status = CL_EMEM);
+        }
+
+        // We'll reset the offmatrix after, so we need to free these offmatrix values, if allocated.
+        for (i = 0; i < data->partsigs; i++) {
+            if (data->offmatrix[i]) {
+                free(data->offmatrix[i][0]);
+                free(data->offmatrix[i]);
+            }
+        }
+
+        if (partsigs == 0 && data->offmatrix != NULL) {
+            // no partsigs, but we do have an offmatrix array from last time, so free up that offmatrix array
+            free(data->offmatrix);
+            data->offmatrix = NULL;
+
+        } else {
+            if (data->partsigs != partsigs) {
+                // the number of partsigs this time is different than last time, so we need to resize the offmatrix array.
+                data->partsigs = partsigs;
+                CLI_REALLOC(
+                    data->offmatrix,
+                    partsigs * sizeof(uint32_t **),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->offmatrix\n"),
+                    status = CL_EMEM);
+            }
+
+            // The offmatrix needs to be reset.
+            memset(data->offmatrix, 0, partsigs * sizeof(uint32_t **));
+        }
+
+        data->lsigs = lsigs;
+        if (lsigs == 0) {
+            // There are no lsigs this time.
+            // If there used to be lsigs in these structures, we should free them.
+            // Then set those pointers to NULL.
+
+            if (NULL != data->lsigcnt) {
+                if (NULL != data->lsigcnt[0]) {
+                    free(data->lsigcnt[0]);
+                    data->lsigcnt[0] = NULL;
+                }
+                free(data->lsigcnt);
+                data->lsigcnt = NULL;
+            }
+            if (NULL != data->yr_matches) {
+                free(data->yr_matches);
+                data->yr_matches = NULL;
+            }
+            if (NULL != data->lsig_matches) {
+                free(data->lsig_matches);
+                data->lsig_matches = NULL;
+            }
+            if (NULL != data->lsigsuboff_last) {
+                if (NULL != data->lsigsuboff_last[0]) {
+                    free(data->lsigsuboff_last[0]);
+                    data->lsigsuboff_last[0] = NULL;
+                }
+                free(data->lsigsuboff_last);
+                data->lsigsuboff_last = NULL;
+            }
+            if (NULL != data->lsigsuboff_first) {
+                if (NULL != data->lsigsuboff_first[0]) {
+                    free(data->lsigsuboff_first[0]);
+                    data->lsigsuboff_first[0] = NULL;
+                }
+                free(data->lsigsuboff_first);
+                data->lsigsuboff_first = NULL;
+            }
+        } else {
+            // There are lsigs this time.
+            // We may need to alloc/realloc if the number of lsigs is different than the last time this data structure was used.
+            // Afterwards, we
+            // and maybe even realloc if the size is differen tthan before.
+
+            if (data->lsigs != lsigs) {
+                CLI_REALLOC(
+                    data->lsigcnt,
+                    lsigs * sizeof(uint32_t *),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt\n");
+                    status = CL_EMEM);
+
+                CLI_REALLOC(
+                    data->lsigcnt[0],
+                    lsigs * 64 * sizeof(uint32_t),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt[0]\n"),
+                    status = CL_EMEM);
+
+                CLI_REALLOC(
+                    data->yr_matches,
+                    lsigs * sizeof(uint8_t),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->yr_matches\n"),
+                    status = CL_EMEM);
+
+                /* subsig offsets */
+                CLI_REALLOC(
+                    data->lsig_matches,
+                    lsigs * sizeof(struct cli_lsig_matches *),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsig_matches\n"),
+                    status = CL_EMEM);
+
+                CLI_REALLOC(
+                    data->lsigsuboff_last,
+                    lsigs * sizeof(uint32_t *),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_last\n");
+                    status = CL_EMEM);
+
+                CLI_REALLOC(
+                    data->lsigsuboff_first,
+                    lsigs * sizeof(uint32_t *),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_first\n");
+                    status = CL_EMEM);
+
+                CLI_REALLOC(
+                    data->lsigsuboff_last[0],
+                    lsigs * 64 * sizeof(uint32_t),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_last[0]\n"),
+                    status = CL_EMEM);
+
+                CLI_REALLOC(
+                    data->lsigsuboff_first[0],
+                    lsigs * 64 * sizeof(uint32_t),
+                    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_first[0]\n"),
+                    status = CL_EMEM);
+            }
+
+            // The following arrays need to be reset.
+            memset(data->lsigcnt[0], 0, lsigs * 64 * sizeof(uint32_t));
+            memset(data->yr_matches, 0, lsigs * sizeof(uint8_t));
+            memset(data->lsig_matches, 0, lsigs * sizeof(struct cli_lsig_matches *));
+            memset(data->lsigsuboff_last[0], 0, lsigs * 64 * sizeof(uint32_t));
+            memset(data->lsigsuboff_first[0], 0, lsigs * 64 * sizeof(uint32_t));
+        }
+    }
+
+    if (reloffsigs > 0) {
+        // Initalize reloffsigs to NONE
+        for (i = 0; i < reloffsigs * 2; i += 2) {
             data->offset[i] = CLI_OFF_NONE;
-    }
-
-    data->partsigs = partsigs;
-    if (partsigs) {
-        data->offmatrix = (uint32_t ***)cli_calloc(partsigs, sizeof(uint32_t **));
-        if (!data->offmatrix) {
-            cli_errmsg("cli_ac_init: Can't allocate memory for data->offmatrix\n");
-
-            if (reloffsigs)
-                free(data->offset);
-
-            return CL_EMEM;
         }
     }
 
-    data->lsigs = lsigs;
-    if (lsigs) {
-        data->lsigcnt = (uint32_t **)cli_malloc(lsigs * sizeof(uint32_t *));
-        if (!data->lsigcnt) {
-            if (partsigs)
-                free(data->offmatrix);
-
-            if (reloffsigs)
-                free(data->offset);
-
-            cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt\n");
-            return CL_EMEM;
-        }
-        data->lsigcnt[0] = (uint32_t *)cli_calloc(lsigs * 64, sizeof(uint32_t));
-        if (!data->lsigcnt[0]) {
-            free(data->lsigcnt);
-            if (partsigs)
-                free(data->offmatrix);
-
-            if (reloffsigs)
-                free(data->offset);
-
-            cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt[0]\n");
-            return CL_EMEM;
-        }
-        for (i = 1; i < lsigs; i++)
-            data->lsigcnt[i] = data->lsigcnt[0] + 64 * i;
-        data->yr_matches = (uint8_t *)cli_calloc(lsigs, sizeof(uint8_t));
-        if (data->yr_matches == NULL) {
-            free(data->lsigcnt[0]);
-            free(data->lsigcnt);
-            if (partsigs)
-                free(data->offmatrix);
-
-            if (reloffsigs)
-                free(data->offset);
-            return CL_EMEM;
-        }
-
-        /* subsig offsets */
-        data->lsig_matches = (struct cli_lsig_matches **)cli_calloc(lsigs, sizeof(struct cli_lsig_matches *));
-        if (!data->lsig_matches) {
-            free(data->yr_matches);
-            free(data->lsigcnt[0]);
-            free(data->lsigcnt);
-            if (partsigs)
-                free(data->offmatrix);
-
-            if (reloffsigs)
-                free(data->offset);
-
-            cli_errmsg("cli_ac_init: Can't allocate memory for data->lsig_matches\n");
-            return CL_EMEM;
-        }
-        data->lsigsuboff_last  = (uint32_t **)cli_malloc(lsigs * sizeof(uint32_t *));
-        data->lsigsuboff_first = (uint32_t **)cli_malloc(lsigs * sizeof(uint32_t *));
-        if (!data->lsigsuboff_last || !data->lsigsuboff_first) {
-            free(data->lsig_matches);
-            free(data->lsigsuboff_last);
-            free(data->lsigsuboff_first);
-            free(data->yr_matches);
-            free(data->lsigcnt[0]);
-            free(data->lsigcnt);
-            if (partsigs)
-                free(data->offmatrix);
-
-            if (reloffsigs)
-                free(data->offset);
-
-            cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_(last|first)\n");
-            return CL_EMEM;
-        }
-        data->lsigsuboff_last[0]  = (uint32_t *)cli_calloc(lsigs * 64, sizeof(uint32_t));
-        data->lsigsuboff_first[0] = (uint32_t *)cli_calloc(lsigs * 64, sizeof(uint32_t));
-        if (!data->lsigsuboff_last[0] || !data->lsigsuboff_first[0]) {
-            free(data->lsig_matches);
-            free(data->lsigsuboff_last[0]);
-            free(data->lsigsuboff_first[0]);
-            free(data->lsigsuboff_last);
-            free(data->lsigsuboff_first);
-            free(data->yr_matches);
-            free(data->lsigcnt[0]);
-            free(data->lsigcnt);
-            if (partsigs)
-                free(data->offmatrix);
-
-            if (reloffsigs)
-                free(data->offset);
-
-            cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_(last|first)[0]\n");
-            return CL_EMEM;
-        }
+    if (lsigs > 0) {
+        // Initalize lsigsuboff (last and first)
         for (j = 0; j < 64; j++) {
             data->lsigsuboff_last[0][j]  = CLI_OFF_NONE;
             data->lsigsuboff_first[0][j] = CLI_OFF_NONE;
         }
+
+        // Set up the last/first pointers and initalize to NONE
         for (i = 1; i < lsigs; i++) {
             data->lsigsuboff_last[i]  = data->lsigsuboff_last[0] + 64 * i;
             data->lsigsuboff_first[i] = data->lsigsuboff_first[0] + 64 * i;
+
             for (j = 0; j < 64; j++) {
                 data->lsigsuboff_last[i][j]  = CLI_OFF_NONE;
                 data->lsigsuboff_first[i][j] = CLI_OFF_NONE;
             }
         }
-    }
-    for (i = 0; i < 32; i++)
-        data->macro_lastmatch[i] = CLI_OFF_NONE;
 
-    data->min_partno = 1;
+        // Set up the lsigcnt pointers
+        for (i = 1; i < lsigs; i++) {
+            data->lsigcnt[i] = data->lsigcnt[0] + 64 * i;
+        }
+    }
+
+    // Initalize macro_lastmatch to NONE
+    for (i = 0; i < 32; i++) {
+        data->macro_lastmatch[i] = CLI_OFF_NONE;
+    }
+
+    data->min_partno  = 1;
+    data->initialized = true;
+    status            = CL_SUCCESS;
+
+done:
+
+    if (CL_SUCCESS != status) {
+        if (reloffsigs) {
+            if (data->offset) {
+                free(data->offset);
+            }
+        }
+        if (partsigs) {
+            if (data->offmatrix) {
+                free(data->offmatrix);
+            }
+        }
+        if (data->lsigcnt) {
+            if (data->lsigcnt[0]) {
+                free(data->lsigcnt[0]);
+            }
+            free(data->lsigcnt);
+        }
+        if (data->yr_matches) {
+            free(data->yr_matches);
+        }
+        if (data->lsigsuboff_first) {
+            if (data->lsigsuboff_first[0]) {
+                free(data->lsigsuboff_first[0]);
+            }
+            free(data->lsigsuboff_first);
+        }
+        if (data->lsigsuboff_last) {
+            if (data->lsigsuboff_last[0]) {
+                free(data->lsigsuboff_last[0]);
+            }
+            free(data->lsigsuboff_last);
+        }
+        if (data->lsig_matches) {
+            free(data->lsig_matches);
+        }
+    }
 
     return CL_SUCCESS;
 }
@@ -1575,8 +1754,15 @@ void cli_ac_freedata(struct cli_ac_data *data)
 {
     uint32_t i;
 
-    if (!data)
+    if (!data) {
+        // invalid pointer to data structure, nevermind.
         return;
+    }
+
+    if (!data->initialized) {
+        // not initalized, no need to free anything
+        return;
+    }
 
     if (data->partsigs) {
         for (i = 0; i < data->partsigs; i++) {
@@ -2032,7 +2218,7 @@ cl_error_t cli_ac_scanbuff(
                                         newres->virname    = pt->virname;
                                         newres->customdata = pt->customdata;
                                         newres->next       = *res;
-                                        newres->offset     = (off_t)offmatrix[pt->parts - 1][1];
+                                        newres->offset     = offmatrix[pt->parts - 1][1];
                                         *res               = newres;
 
                                         ptN = ptN->next_same;
@@ -2090,7 +2276,7 @@ cl_error_t cli_ac_scanbuff(
                                     }
                                     newres->virname    = pt->virname;
                                     newres->customdata = pt->customdata;
-                                    newres->offset     = (off_t)realoff;
+                                    newres->offset     = realoff;
                                     newres->next       = *res;
                                     *res               = newres;
 

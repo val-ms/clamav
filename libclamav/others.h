@@ -46,13 +46,14 @@
 
 #include "clamav.h"
 #include "dconf.h"
-#include "filetypes.h"
+#include "filetypes_structures.h"
 #include "fmap.h"
 #include "regex/regex.h"
 #include "bytecode.h"
 #include "bytecode_api.h"
 #include "events.h"
 #include "crtmgr.h"
+#include "matcher-ac-structures.h"
 
 #include "unrar_iface.h"
 
@@ -192,6 +193,10 @@ typedef struct recursion_level_tag {
 
 typedef void *evidence_t;
 
+#ifndef CLI_MTARGETS
+#define CLI_MTARGETS 15
+#endif
+
 /* internal clamav context */
 typedef struct cli_ctx_tag {
     char *target_filepath;    /* (optional) The filepath of the original scan target. */
@@ -224,6 +229,7 @@ typedef struct cli_ctx_tag {
     struct timeval time_limit;
     bool limit_exceeded; /* To guard against alerting on limits exceeded more than once, or storing that in the JSON metadata more than once. */
     bool abort_scan;     /* So we can guarantee a scan is aborted, even if CL_ETIMEOUT/etc. status is lost in the scan recursion stack. */
+    struct cli_ac_data mdata[CLI_MTARGETS];
 } cli_ctx;
 
 #define STATS_ANON_UUID "5b585e8f-3be5-11e3-bf0b-18037319526c"

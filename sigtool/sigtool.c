@@ -199,7 +199,7 @@ static int hashpe(const char *filename, unsigned int class, int type)
         goto done;
     }
 
-    if (cli_add_content_match_pattern(engine->root[0], "test", "deadbeef", 0, 0, 0, "*", NULL, 0) != CL_SUCCESS) {
+    if (cli_add_content_match_pattern(engine->root[TARGET_GENERIC], "test", "deadbeef", 0, 0, 0, "*", NULL, 0) != CL_SUCCESS) {
         mprintf(LOGG_ERROR, "hashpe: Can't parse signature\n");
         goto done;
     }
@@ -2209,7 +2209,7 @@ static void matchsig(char *sig, const char *offset, int fd)
         goto done;
     }
 
-    if (readdb_parse_ldb_subsignature(engine->root[0], "test", sig, "*", NULL, 0, 0, 1, &tdb) != CL_SUCCESS) {
+    if (readdb_parse_ldb_subsignature(engine->root[TARGET_GENERIC], "test", sig, "*", NULL, 0, 0, 1, &tdb) != CL_SUCCESS) {
         mprintf(LOGG_ERROR, "matchsig: Can't parse signature\n");
         goto done;
     }
@@ -2253,7 +2253,7 @@ static void matchsig(char *sig, const char *offset, int fd)
         mprintf(LOGG_INFO, "MATCH: ** YES%s ** (%u %s:", offset ? "/CHECK OFFSET" : "", matches, matches > 1 ? "matches at offsets" : "match at offset");
         res = acres;
         while (res) {
-            mprintf(LOGG_INFO, " %u", (unsigned int)res->offset);
+            mprintf(LOGG_INFO, " " STDu32, res->offset);
             res = res->next;
         }
         mprintf(LOGG_INFO, ")\n");
@@ -3406,7 +3406,7 @@ static int dumpcerts(const struct optstruct *opts)
         goto done;
     }
 
-    if (cli_add_content_match_pattern(engine->root[0], "test", "deadbeef", 0, 0, 0, "*", NULL, 0) != CL_SUCCESS) {
+    if (cli_add_content_match_pattern(engine->root[TARGET_GENERIC], "test", "deadbeef", 0, 0, 0, "*", NULL, 0) != CL_SUCCESS) {
         mprintf(LOGG_ERROR, "dumpcerts: Can't parse signature\n");
         goto done;
     }

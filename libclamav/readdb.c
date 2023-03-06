@@ -1013,7 +1013,7 @@ cl_error_t cli_initroots(struct cl_engine *engine, unsigned int options)
             root->fuzzy_hashmap = fuzzy_hashmap_new();
         }
     }
-    engine->root[1]->bm_offmode = 1; /* BM offset mode for PE files */
+    engine->root[TARGET_PE]->bm_offmode = 1; /* BM offset mode for PE files */
     return CL_SUCCESS;
 }
 
@@ -1246,7 +1246,7 @@ static cl_error_t cli_loaddb(FILE *fs, struct cl_engine *engine, unsigned int *s
     if (CL_SUCCESS != (ret = cli_initroots(engine, options)))
         return ret;
 
-    root = engine->root[0];
+    root = engine->root[TARGET_GENERIC];
 
     if (engine->ignored)
         if (!(buffer_cpy = cli_malloc(FILEBUFF))) {
@@ -2502,7 +2502,7 @@ static int cli_loadftm(FILE *fs, struct cl_engine *engine, unsigned int options,
 
         magictype = atoi(tokens[0]);
         if (magictype == 1) { /* A-C */
-            if (CL_SUCCESS != (ret = cli_add_content_match_pattern(engine->root[0], tokens[3], tokens[2], 0, rtype, type, tokens[1], NULL, options)))
+            if (CL_SUCCESS != (ret = cli_add_content_match_pattern(engine->root[TARGET_GENERIC], tokens[3], tokens[2], 0, rtype, type, tokens[1], NULL, options)))
                 break;
 
         } else if ((magictype == 0) || (magictype == 4)) { /* memcmp() */

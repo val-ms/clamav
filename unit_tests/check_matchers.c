@@ -162,6 +162,8 @@ static const char *virname = NULL;
 static void setup(void)
 {
     struct cli_matcher *root;
+    size_t i;
+
     virname = NULL;
 
     memset(&thefmap, 0, sizeof(thefmap));
@@ -192,24 +194,34 @@ static void setup(void)
     root->mempool = ctx.engine->mempool;
 #endif
 
-    ctx.engine->root[0] = root;
+    ctx.engine->root[TARGET_GENERIC] = root;
+
+    // Mark each of the matcher targets as uninitialized.
+    for (i = 0; i < CLI_MTARGETS; i++) {
+        ctx.mdata[i].initialized = false;
+    }
 }
 
 static void teardown(void)
 {
+    size_t i;
+
     cl_engine_free((struct cl_engine *)ctx.engine);
     free(ctx.recursion_stack);
     evidence_free(ctx.evidence);
+    for (i = 0; i < CLI_MTARGETS; i++) {
+        cli_ac_freedata(&ctx.mdata[i]);
+    }
 }
 
 START_TEST(test_ac_scanbuff)
 {
-    struct cli_ac_data mdata;
+    struct cli_ac_data matcher_data = {0};
     struct cli_matcher *root;
     unsigned int i;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
     root->ac_only = 1;
 
@@ -227,12 +239,12 @@ START_TEST(test_ac_scanbuff)
     ret = cli_ac_buildtrie(root);
     ck_assert_msg(ret == CL_SUCCESS, "cli_ac_buildtrie() failed");
 
-    ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
+    ret = cli_ac_initdata(&matcher_data, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
     ck_assert_msg(ret == CL_SUCCESS, "cli_ac_initdata() failed");
 
     ctx.options->general &= ~CL_SCAN_GENERAL_ALLMATCHES; /* make sure all-match is disabled */
     for (i = 0; ac_testdata[i].data; i++) {
-        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), &virname, NULL, NULL, root, &matcher_data, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == CL_VIRUS, "cli_ac_scanbuff() failed for %s", ac_testdata[i].virname);
         ck_assert_msg(!strncmp(virname, ac_testdata[i].virname, strlen(ac_testdata[i].virname)), "Dataset %u matched with %s", i, virname);
 
@@ -241,18 +253,18 @@ START_TEST(test_ac_scanbuff)
         ck_assert_msg(!strncmp(virname, ac_testdata[i].virname, strlen(ac_testdata[i].virname)), "Dataset %u matched with %s", i, virname);
     }
 
-    cli_ac_freedata(&mdata);
+    cli_ac_freedata(&matcher_data);
 }
 END_TEST
 
 START_TEST(test_ac_scanbuff_allscan)
 {
-    struct cli_ac_data mdata;
+    struct cli_ac_data matcher_data = {0};
     struct cli_matcher *root;
     unsigned int i;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
     root->ac_only = 1;
 
@@ -270,12 +282,12 @@ START_TEST(test_ac_scanbuff_allscan)
     ret = cli_ac_buildtrie(root);
     ck_assert_msg(ret == CL_SUCCESS, "cli_ac_buildtrie() failed");
 
-    ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
+    ret = cli_ac_initdata(&matcher_data, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
     ck_assert_msg(ret == CL_SUCCESS, "cli_ac_initdata() failed");
 
     ctx.options->general |= CL_SCAN_GENERAL_ALLMATCHES; /* enable all-match */
     for (i = 0; ac_testdata[i].data; i++) {
-        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_testdata[i].data, strlen(ac_testdata[i].data), &virname, NULL, NULL, root, &matcher_data, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == CL_VIRUS, "cli_ac_scanbuff() failed for %s", ac_testdata[i].virname);
         ck_assert_msg(!strncmp(virname, ac_testdata[i].virname, strlen(ac_testdata[i].virname)), "Dataset %u matched with %s", i, virname);
 
@@ -293,18 +305,18 @@ START_TEST(test_ac_scanbuff_allscan)
         }
     }
 
-    cli_ac_freedata(&mdata);
+    cli_ac_freedata(&matcher_data);
 }
 END_TEST
 
 START_TEST(test_ac_scanbuff_ex)
 {
-    struct cli_ac_data mdata;
+    struct cli_ac_data matcher_data = {0};
     struct cli_matcher *root;
     unsigned int i;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
     root->ac_only = 1;
 
@@ -322,12 +334,12 @@ START_TEST(test_ac_scanbuff_ex)
     ret = cli_ac_buildtrie(root);
     ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_ac_buildtrie() failed");
 
-    ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
+    ret = cli_ac_initdata(&matcher_data, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
     ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_ac_initdata() failed");
 
     ctx.options->general &= ~CL_SCAN_GENERAL_ALLMATCHES; /* make sure all-match is disabled */
     for (i = 0; ac_sigopts_testdata[i].data; i++) {
-        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, &virname, NULL, NULL, root, &matcher_data, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == ac_sigopts_testdata[i].expected_result, "[ac_ex] cli_ac_scanbuff() failed for %s (%d != %d)", ac_sigopts_testdata[i].virname, ret, ac_sigopts_testdata[i].expected_result);
         if (ac_sigopts_testdata[i].expected_result == CL_VIRUS)
             ck_assert_msg(!strncmp(virname, ac_sigopts_testdata[i].virname, strlen(ac_sigopts_testdata[i].virname)), "[ac_ex] Dataset %u matched with %s", i, virname);
@@ -336,18 +348,18 @@ START_TEST(test_ac_scanbuff_ex)
         ck_assert_msg(ret == ac_sigopts_testdata[i].expected_result, "[ac_ex] cli_ac_scanbuff() failed for %s (%d != %d)", ac_sigopts_testdata[i].virname, ret, ac_sigopts_testdata[i].expected_result);
     }
 
-    cli_ac_freedata(&mdata);
+    cli_ac_freedata(&matcher_data);
 }
 END_TEST
 
 START_TEST(test_ac_scanbuff_allscan_ex)
 {
-    struct cli_ac_data mdata;
+    struct cli_ac_data matcher_data = {0};
     struct cli_matcher *root;
     unsigned int i;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
     root->ac_only = 1;
 
@@ -365,14 +377,14 @@ START_TEST(test_ac_scanbuff_allscan_ex)
     ret = cli_ac_buildtrie(root);
     ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_ac_buildtrie() failed");
 
-    ret = cli_ac_initdata(&mdata, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
+    ret = cli_ac_initdata(&matcher_data, root->ac_partsigs, 0, 0, CLI_DEFAULT_AC_TRACKLEN);
     ck_assert_msg(ret == CL_SUCCESS, "[ac_ex] cli_ac_initdata() failed");
 
     ctx.options->general |= CL_SCAN_GENERAL_ALLMATCHES; /* enable all-match */
     for (i = 0; ac_sigopts_testdata[i].data; i++) {
         cl_error_t verdict = CL_CLEAN;
 
-        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, &virname, NULL, NULL, root, &mdata, 0, 0, NULL, AC_SCAN_VIR, NULL);
+        ret = cli_ac_scanbuff((const unsigned char *)ac_sigopts_testdata[i].data, ac_sigopts_testdata[i].dlength, &virname, NULL, NULL, root, &matcher_data, 0, 0, NULL, AC_SCAN_VIR, NULL);
         ck_assert_msg(ret == ac_sigopts_testdata[i].expected_result, "[ac_ex] cli_ac_scanbuff() failed for %s (%d != %d)", ac_sigopts_testdata[i].virname, ret, ac_sigopts_testdata[i].expected_result);
         if (ac_sigopts_testdata[i].expected_result == CL_VIRUS)
             ck_assert_msg(!strncmp(virname, ac_sigopts_testdata[i].virname, strlen(ac_sigopts_testdata[i].virname)), "[ac_ex] Dataset %u matched with %s", i, virname);
@@ -394,7 +406,7 @@ START_TEST(test_ac_scanbuff_allscan_ex)
         }
     }
 
-    cli_ac_freedata(&mdata);
+    cli_ac_freedata(&matcher_data);
 }
 END_TEST
 
@@ -404,7 +416,7 @@ START_TEST(test_bm_scanbuff)
     const char *virname = NULL;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
 
 #ifdef USE_MPOOL
@@ -433,7 +445,7 @@ START_TEST(test_bm_scanbuff_allscan)
     const char *virname = NULL;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
 
 #ifdef USE_MPOOL
@@ -460,13 +472,13 @@ END_TEST
 
 START_TEST(test_pcre_scanbuff)
 {
-    struct cli_ac_data mdata;
+    struct cli_ac_data matcher_data = {0};
     struct cli_matcher *root;
     char *hexsig;
     unsigned int i, hexlen;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
 
 #ifdef USE_MPOOL
@@ -494,7 +506,7 @@ START_TEST(test_pcre_scanbuff)
 
     // recomputate offsets
 
-    ret = cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
+    ret = cli_ac_initdata(&matcher_data, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
     ck_assert_msg(ret == CL_SUCCESS, "[pcre] cli_ac_initdata() failed");
 
     ctx.options->general &= ~CL_SCAN_GENERAL_ALLMATCHES; /* make sure all-match is disabled */
@@ -508,19 +520,19 @@ START_TEST(test_pcre_scanbuff)
         ck_assert_msg(ret == pcre_testdata[i].expected_result, "[pcre] cli_scan_buff() failed for %s", pcre_testdata[i].virname);
     }
 
-    cli_ac_freedata(&mdata);
+    cli_ac_freedata(&matcher_data);
 }
 END_TEST
 
 START_TEST(test_pcre_scanbuff_allscan)
 {
-    struct cli_ac_data mdata;
+    struct cli_ac_data matcher_data = {0};
     struct cli_matcher *root;
     char *hexsig;
     unsigned int i, hexlen;
     int ret;
 
-    root = ctx.engine->root[0];
+    root = ctx.engine->root[TARGET_GENERIC];
     ck_assert_msg(root != NULL, "root == NULL");
 
 #ifdef USE_MPOOL
@@ -548,7 +560,7 @@ START_TEST(test_pcre_scanbuff_allscan)
 
     // recomputate offsets
 
-    ret = cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
+    ret = cli_ac_initdata(&matcher_data, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN);
     ck_assert_msg(ret == CL_SUCCESS, "[pcre] cli_ac_initdata() failed");
 
     ctx.options->general |= CL_SCAN_GENERAL_ALLMATCHES; /* enable all-match */
@@ -577,7 +589,7 @@ START_TEST(test_pcre_scanbuff_allscan)
         }
     }
 
-    cli_ac_freedata(&mdata);
+    cli_ac_freedata(&matcher_data);
 }
 END_TEST
 

@@ -67,6 +67,7 @@ static void runtest(const char *file, uint64_t expected, int fail, int nojit,
     char filestr[512];
     const char *virname = NULL;
     struct cl_scan_options options;
+    size_t i;
 
     memset(&cctx, 0, sizeof(cctx));
     memset(&options, 0, sizeof(struct cl_scan_options));
@@ -163,6 +164,11 @@ static void runtest(const char *file, uint64_t expected, int fail, int nojit,
     free(cctx.recursion_stack);
     cl_engine_free(engine);
     evidence_free(cctx.evidence);
+    // Clean up the matcher targets.
+    for (i = 0; i < CLI_MTARGETS; i++) {
+        cli_ac_freedata(&cctx.mdata[i]);
+    }
+
     if (fdin >= 0)
         close(fdin);
 }

@@ -772,6 +772,120 @@ pub struct crtmgr {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+pub struct cli_subsig_matches {
+    pub last: u32,
+    pub next: u32,
+    pub offsets: [u32; 16usize],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct cli_lsig_matches {
+    pub subsigs: u32,
+    pub matches: [*mut cli_subsig_matches; 1usize],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct cli_ac_data {
+    pub initialized: bool,
+    pub offmatrix: *mut *mut *mut u32,
+    pub partsigs: u32,
+    pub lsigs: u32,
+    pub reloffsigs: u32,
+    pub lsigcnt: *mut *mut u32,
+    pub lsigsuboff_last: *mut *mut u32,
+    pub lsigsuboff_first: *mut *mut u32,
+    pub lsig_matches: *mut *mut cli_lsig_matches,
+    pub yr_matches: *mut u8,
+    pub offset: *mut u32,
+    pub macro_lastmatch: [u32; 32usize],
+    #[doc = " Hashset for versioninfo matching"]
+    pub vinfo: *const cli_hashset,
+    pub min_partno: u32,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct cli_alt_node {
+    pub str_: *mut u16,
+    pub len: u16,
+    pub unique: u8,
+    pub next: *mut cli_alt_node,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct cli_ac_special {
+    pub alt: cli_ac_special__bindgen_ty_1,
+    pub len: [u16; 2usize],
+    pub num: u16,
+    pub type_: u16,
+    pub negative: u16,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union cli_ac_special__bindgen_ty_1 {
+    pub byte: *mut ::std::os::raw::c_uchar,
+    pub f_str: *mut *mut ::std::os::raw::c_uchar,
+    pub v_str: *mut cli_alt_node,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct cli_ac_patt {
+    pub pattern: *mut u16,
+    pub prefix: *mut u16,
+    pub length: [u16; 3usize],
+    pub prefix_length: [u16; 3usize],
+    pub mindist: u32,
+    pub maxdist: u32,
+    pub sigid: u32,
+    pub lsigid: [u32; 3usize],
+    pub ch: [u16; 2usize],
+    pub virname: *mut ::std::os::raw::c_char,
+    pub customdata: *mut ::std::os::raw::c_void,
+    pub ch_mindist: [u16; 2usize],
+    pub ch_maxdist: [u16; 2usize],
+    pub parts: u16,
+    pub partno: u16,
+    pub special: u16,
+    pub special_pattern: u16,
+    pub special_table: *mut *mut cli_ac_special,
+    pub rtype: u16,
+    pub type_: u16,
+    pub offdata: [u32; 4usize],
+    pub offset_min: u32,
+    pub offset_max: u32,
+    pub boundary: u32,
+    pub depth: u8,
+    pub sigopts: u8,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct cli_ac_list {
+    pub me: *mut cli_ac_patt,
+    pub __bindgen_anon_1: cli_ac_list__bindgen_ty_1,
+    pub next_same: *mut cli_ac_list,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union cli_ac_list__bindgen_ty_1 {
+    pub node: *mut cli_ac_node,
+    pub next: *mut cli_ac_list,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct cli_ac_node {
+    pub list: *mut cli_ac_list,
+    pub trans: *mut *mut cli_ac_node,
+    pub fail: *mut cli_ac_node,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct cli_ac_result {
+    pub virname: *const ::std::os::raw::c_char,
+    pub customdata: *mut ::std::os::raw::c_void,
+    pub offset: u32,
+    pub next: *mut cli_ac_result,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct bitset_tag {
     pub bitset: *mut ::std::os::raw::c_uchar,
     pub length: ::std::os::raw::c_ulong,
@@ -823,6 +937,7 @@ pub struct cli_ctx_tag {
     pub time_limit: timeval,
     pub limit_exceeded: bool,
     pub abort_scan: bool,
+    pub mdata: [cli_ac_data; 15usize],
 }
 pub type cli_ctx = cli_ctx_tag;
 #[repr(C)]
@@ -1033,119 +1148,6 @@ pub struct cli_hashset {
     pub mask: u32,
     pub count: u32,
     pub limit: u32,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cli_subsig_matches {
-    pub last: u32,
-    pub next: u32,
-    pub offsets: [u32; 16usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cli_lsig_matches {
-    pub subsigs: u32,
-    pub matches: [*mut cli_subsig_matches; 1usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cli_ac_data {
-    pub offmatrix: *mut *mut *mut u32,
-    pub partsigs: u32,
-    pub lsigs: u32,
-    pub reloffsigs: u32,
-    pub lsigcnt: *mut *mut u32,
-    pub lsigsuboff_last: *mut *mut u32,
-    pub lsigsuboff_first: *mut *mut u32,
-    pub lsig_matches: *mut *mut cli_lsig_matches,
-    pub yr_matches: *mut u8,
-    pub offset: *mut u32,
-    pub macro_lastmatch: [u32; 32usize],
-    #[doc = " Hashset for versioninfo matching"]
-    pub vinfo: *const cli_hashset,
-    pub min_partno: u32,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cli_alt_node {
-    pub str_: *mut u16,
-    pub len: u16,
-    pub unique: u8,
-    pub next: *mut cli_alt_node,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct cli_ac_special {
-    pub alt: cli_ac_special__bindgen_ty_1,
-    pub len: [u16; 2usize],
-    pub num: u16,
-    pub type_: u16,
-    pub negative: u16,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union cli_ac_special__bindgen_ty_1 {
-    pub byte: *mut ::std::os::raw::c_uchar,
-    pub f_str: *mut *mut ::std::os::raw::c_uchar,
-    pub v_str: *mut cli_alt_node,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cli_ac_patt {
-    pub pattern: *mut u16,
-    pub prefix: *mut u16,
-    pub length: [u16; 3usize],
-    pub prefix_length: [u16; 3usize],
-    pub mindist: u32,
-    pub maxdist: u32,
-    pub sigid: u32,
-    pub lsigid: [u32; 3usize],
-    pub ch: [u16; 2usize],
-    pub virname: *mut ::std::os::raw::c_char,
-    pub customdata: *mut ::std::os::raw::c_void,
-    pub ch_mindist: [u16; 2usize],
-    pub ch_maxdist: [u16; 2usize],
-    pub parts: u16,
-    pub partno: u16,
-    pub special: u16,
-    pub special_pattern: u16,
-    pub special_table: *mut *mut cli_ac_special,
-    pub rtype: u16,
-    pub type_: u16,
-    pub offdata: [u32; 4usize],
-    pub offset_min: u32,
-    pub offset_max: u32,
-    pub boundary: u32,
-    pub depth: u8,
-    pub sigopts: u8,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct cli_ac_list {
-    pub me: *mut cli_ac_patt,
-    pub __bindgen_anon_1: cli_ac_list__bindgen_ty_1,
-    pub next_same: *mut cli_ac_list,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union cli_ac_list__bindgen_ty_1 {
-    pub node: *mut cli_ac_node,
-    pub next: *mut cli_ac_list,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cli_ac_node {
-    pub list: *mut cli_ac_list,
-    pub trans: *mut *mut cli_ac_node,
-    pub fail: *mut cli_ac_node,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cli_ac_result {
-    pub virname: *const ::std::os::raw::c_char,
-    pub customdata: *mut ::std::os::raw::c_void,
-    pub offset: off_t,
-    pub next: *mut cli_ac_result,
 }
 extern "C" {
     #[doc = " @brief Increment the count for a subsignature of a logical signature."]

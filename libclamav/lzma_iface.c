@@ -133,7 +133,7 @@ int cli_LzmaDecode(struct CLI_LZMA *L)
     }*/
     //res = LzmaDec_DecodeToBuf(&L->state, L->next_out, &outbytes, L->next_in, &inbytes, finish, &status);
     //TODO: find better way to pass up status result after decode
-    L->last_out = clrs_lzma_decode(&L->next_in, inbytes, L->next_out);
+    L->last_out = clrs_lzma_decode(L->next_in, inbytes, &L->next_out);
     if (L->last_out == 0) {
         cli_dbgmsg("cli_LzmaDecode: decode did not produce any output\n");
         return LZMA_RESULT_DATA_ERROR;

@@ -71,7 +71,8 @@ pub extern "C" fn clrs_lzma_decode(
     // setup the decoder
     let mut decoder = Stream::new_lzma_decoder(u64::MAX).unwrap();
 
-    let mut out_vec = vec![];
+    // let mut out_vec = vec![];
+    let mut out_vec = Vec::with_capacity(in_buf.len() * 10);
 
     match xz2::stream::Stream::process_vec(&mut decoder, in_buf, &mut out_vec, Action::Run) {
         Ok(status) =>
@@ -81,7 +82,12 @@ pub extern "C" fn clrs_lzma_decode(
                 Status::GetCheck => debug!("GetCheck tiggered\n"),
                 Status::MemNeeded => debug!("Ran out of memory\n"),
         },
-        Err(_) => return -2,
+        Err(e) => {
+            println!("{:?} error.", e);
+            println!("Consumed {:?} bytes.", decoder.total_in());
+            println!("Produced {:?} bytes.", decoder.total_out());
+            return -2
+        },
     }
 
     debug!(">>>>>>>>>>>>>> out? {:02X?}\n", out_vec);

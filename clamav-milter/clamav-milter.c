@@ -175,10 +175,10 @@ int main(int argc, char **argv)
 
     pt = optget(opts, "AddHeader")->strarg;
     if (strcasecmp(pt, "No")) {
-        char myname[255];
+        char myname[200];
 
         if (((opt = optget(opts, "ReportHostname"))->enabled &&
-             strncpy(myname, opt->strarg, sizeof(myname))) ||
+             strncpy(myname, opt->strarg, sizeof(myname) - 1)) ||
             !gethostname(myname, sizeof(myname))) {
 
             myname[sizeof(myname) - 1] = '\0';

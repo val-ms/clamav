@@ -117,6 +117,7 @@
 #include "msdoc.h"
 #include "execs.h"
 #include "egg.h"
+#include "jsparse/js-norm.h"
 
 // libclamunrar_iface
 #include "unrar_iface.h"
@@ -1467,7 +1468,7 @@ static cl_error_t cli_scanszdd(cli_ctx *ctx)
     return ret;
 }
 
-static cl_error_t vba_scandata(const unsigned char *data, size_t len, cli_ctx *ctx)
+static cl_error_t scandata(const unsigned char *data, size_t len, cli_ctx *ctx, cli_file_t file_type)
 {
     cl_error_t ret                      = CL_SUCCESS;
     struct cli_matcher *generic_ac_root = ctx->engine->root[0];
@@ -1493,7 +1494,7 @@ static cl_error_t vba_scandata(const unsigned char *data, size_t len, cli_ctx *c
     mdata[0] = &tmdata;
     mdata[1] = &gmdata;
 
-    ret = cli_scan_buff(data, len, 0, ctx, CL_TYPE_MSOLE2, mdata);
+    ret = cli_scan_buff(data, len, 0, ctx, file_type, mdata);
     if (CL_SUCCESS != ret) {
         goto done;
     }
@@ -1508,7 +1509,7 @@ static cl_error_t vba_scandata(const unsigned char *data, size_t len, cli_ctx *c
         goto done;
     }
 
-    ret = cli_recursion_stack_push(ctx, new_map, CL_TYPE_MSOLE2, true, LAYER_ATTRIBUTES_NONE); /* Perform exp_eval with child fmap */
+    ret = cli_recursion_stack_push(ctx, new_map, file_type, true, LAYER_ATTRIBUTES_NONE); /* Perform exp_eval with child fmap */
     if (CL_SUCCESS != ret) {
         cli_dbgmsg("Failed to scan fmap.\n");
         goto done;
@@ -1900,7 +1901,7 @@ static cl_error_t cli_ole2_tempdir_scan_vba(const char *dir, cli_ctx *ctx, struc
                         proj_contents_fname = NULL;
                     }
 
-                    status = vba_scandata(data, data_len, ctx);
+                    status = scandata(data, data_len, ctx, CL_TYPE_VBA);
                     if (CL_SUCCESS != status) {
                         goto done;
                     }
@@ -1955,6 +1956,7 @@ static cl_error_t cli_ole2_tempdir_scan_vba(const char *dir, cli_ctx *ctx, struc
         cli_dbgmsg("cli_ole2_tempdir_scan_vba: uniq_get('worddocument') failed with ret code (%d)!\n", status);
         goto done;
     }
+
     while (hashcnt) {
         snprintf(vbaname, sizeof(vbaname), "%s" PATHSEP "%s_%u", dir, hash, hashcnt);
         vbaname[sizeof(vbaname) - 1] = '\0';
@@ -1985,7 +1987,7 @@ static cl_error_t cli_ole2_tempdir_scan_vba(const char *dir, cli_ctx *ctx, struc
                     *ctx->scanned += vba_project->length[i] / CL_COUNT_PRECISION;
                 }
 
-                status = vba_scandata(data, vba_project->length[i], ctx);
+                status = scandata(data, vba_project->length[i], ctx, CL_TYPE_VBA);
                 if (CL_SUCCESS != status) {
                     goto done;
                 }
@@ -2157,11 +2159,13 @@ static cl_error_t cli_scanhtml(cli_ctx *ctx)
     if (fd >= 0) {
         // javascript file exists, so lets scan it (twice, as different types).
 
-        status = cli_scan_desc(fd, ctx, CL_TYPE_HTML, false, NULL, AC_SCAN_VIR, NULL, NULL, LAYER_ATTRIBUTES_NORMALIZED);
+        // Scan as javascript which is considered target type 3 (TARGET_HTML)
+        status = cli_scan_desc(fd, ctx, CL_TYPE_JAVASCRIPT, false, NULL, AC_SCAN_VIR, NULL, NULL, LAYER_ATTRIBUTES_NORMALIZED);
         if (CL_SUCCESS != status) {
             goto done;
         }
 
+        // Also scan as ASCII text which is considered target type 7 (TARGET_ASCII)
         status = cli_scan_desc(fd, ctx, CL_TYPE_TEXT_ASCII, false, NULL, AC_SCAN_VIR, NULL, NULL, LAYER_ATTRIBUTES_NORMALIZED);
         if (CL_SUCCESS != status) {
             goto done;
@@ -4951,6 +4955,9 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
         case CL_TYPE_TEXT_UTF16BE:
         case CL_TYPE_TEXT_UTF16LE:
         case CL_TYPE_TEXT_UTF8:
+        case CL_TYPE_PYTHON_SCRIPT:
+        case CL_TYPE_VBA:
+        case CL_TYPE_XLM:
             perf_nested_start(ctx, PERFT_SCRIPT, PERFT_SCAN);
             if ((dettype != CL_TYPE_HTML) &&
                 SCAN_PARSE_HTML && (DCONF_DOC & DOC_CONF_SCRIPT) && (ret != CL_VIRUS)) {
@@ -4963,6 +4970,49 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
             perf_nested_stop(ctx, PERFT_SCRIPT, PERFT_SCAN);
             break;
 
+        case CL_TYPE_JAVASCRIPT: {
+            if (!ctx->recursion_stack[ctx->recursion_level].attributes & LAYER_ATTRIBUTES_NORMALIZED) {
+                char fullname[1024];
+                int fd = -1;
+
+                //
+                // If the file is not normalized, then we need to normalize it before scanning.
+                //
+                const uint8_t *javascript_buffer = fmap_need_off_once(ctx->fmap, 0, ctx->fmap->len);
+                struct parser_state *js_state    = cli_js_init();
+
+                cli_js_process_buffer(js_state, (const char *)javascript_buffer, ctx->fmap->len);
+                cli_js_parse_done(js_state);
+                cli_js_output(js_state, ctx->sub_tmpdir);
+                cli_js_destroy(js_state);
+
+                // Find the normalized javascript file that was created in the tmpdir by cli_js_output().
+                snprintf(fullname, 1024, "%s" PATHSEP "javascript", ctx->sub_tmpdir);
+                fd = open(fullname, O_RDONLY | O_BINARY);
+                if (fd >= 0) {
+                    // javascript file exists, so lets scan it (twice, as different types).
+
+                    // Scan as javascript which is considered target type 3 (TARGET_HTML)
+                    ret = cli_scan_desc(fd, ctx, CL_TYPE_JAVASCRIPT, false, NULL, AC_SCAN_VIR, NULL, NULL, LAYER_ATTRIBUTES_NORMALIZED);
+                    if (CL_SUCCESS != ret) {
+                        goto done;
+                    }
+
+                    // Also scan as ASCII text which is considered target type 7 (TARGET_ASCII)
+                    ret = cli_scan_desc(fd, ctx, CL_TYPE_TEXT_ASCII, false, NULL, AC_SCAN_VIR, NULL, NULL, LAYER_ATTRIBUTES_NORMALIZED);
+                    if (CL_SUCCESS != ret) {
+                        goto done;
+                    }
+                }
+            }
+
+            // But also scan both normalized and non-normalized javascript files.
+            ret = cli_scan_fmap(ctx, type, false, NULL, AC_SCAN_VIR, NULL, NULL);
+            if (CL_SUCCESS != ret) {
+                goto done;
+            }
+            break;
+        }
         /* Due to performance reasons all executables were first scanned
          * in raw mode. Now we will try to unpack them
          */

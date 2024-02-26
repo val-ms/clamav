@@ -1039,9 +1039,9 @@ static size_t find_length(struct pdf_struct *pdf, struct pdf_obj *obj, const cha
 
 #define DUMP_MASK ((1 << OBJ_CONTENTS) | (1 << OBJ_FILTER_FLATE) | (1 << OBJ_FILTER_DCT) | (1 << OBJ_FILTER_AH) | (1 << OBJ_FILTER_A85) | (1 << OBJ_EMBEDDED_FILE) | (1 << OBJ_JAVASCRIPT) | (1 << OBJ_OPENACTION) | (1 << OBJ_LAUNCHACTION))
 
-static int run_pdf_hooks(struct pdf_struct *pdf, enum pdf_phase phase, int fd)
+static cl_error_t run_pdf_hooks(struct pdf_struct *pdf, enum pdf_phase phase, int fd)
 {
-    int ret;
+    cl_error_t ret;
     struct cli_bc_ctx *bc_ctx;
     cli_ctx *ctx = NULL;
     fmap_t *map;
@@ -1384,7 +1384,7 @@ static void process(struct text_norm_state *s, enum cstate *st, const char *buf,
     } while (length > 0);
 }
 
-static int pdf_scan_contents(int fd, struct pdf_struct *pdf, struct pdf_obj *obj)
+static cl_error_t pdf_scan_contents(int fd, struct pdf_struct *pdf, struct pdf_obj *obj)
 {
     struct text_norm_state s;
     char fullname[1024];
@@ -1429,10 +1429,11 @@ static int pdf_scan_contents(int fd, struct pdf_struct *pdf, struct pdf_obj *obj
 cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t flags)
 {
     char fullname[PATH_MAX + 1];
-    int fout      = -1;
-    size_t sum    = 0;
-    cl_error_t rc = CL_SUCCESS;
-    int dump      = 1;
+    bool created_tempfile = false;
+    int fout              = -1;
+    size_t sum            = 0;
+    cl_error_t rc         = CL_SUCCESS;
+    int dump              = 1;
 
     cli_dbgmsg("pdf_extract_obj: obj %u %u\n", obj->id >> 8, obj->id & 0xff);
 
@@ -1473,8 +1474,9 @@ cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t
         dump = 1;
     }
 
-    if (!dump)
+    if (!dump) {
         return CL_CLEAN;
+    }
 
     cli_dbgmsg("pdf_extract_obj: dumping obj %u %u\n", obj->id >> 8, obj->id & 0xff);
 
@@ -1486,6 +1488,8 @@ cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t
 
         return CL_ETMPFILE;
     }
+
+    created_tempfile = true;
 
     if (!(flags & PDF_EXTRACT_OBJ_SCAN)) {
         if (NULL != obj->path) {
@@ -1564,7 +1568,7 @@ cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t
             length = obj->stream_size;
             if (0 == length) {
                 cli_dbgmsg("pdf_extract_obj: Alleged or calculated stream length and stream buffer size both 0\n");
-                goto done; /* Empty stream, nothing to scan */
+                goto extract_complete; /* Empty stream, nothing to scan */
             }
         }
 
@@ -1663,7 +1667,7 @@ cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t
              *   make a best effort to keep parsing...
              *   Unless we were unable to allocate memory.*/
             if (CL_EMEM == rc) {
-                goto really_done;
+                goto done;
             }
             if (CL_EPARSE == rc) {
                 rc = CL_SUCCESS;
@@ -1711,7 +1715,7 @@ cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t
 
         if (rc == CL_VIRUS) {
             sum = 0; /* prevents post-filter scan */
-            goto done;
+            goto extract_complete;
         }
 
     } else if (obj->flags & (1 << OBJ_JAVASCRIPT)) {
@@ -1723,7 +1727,7 @@ cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t
         off_t bytesleft = obj->size;
 
         if (bytesleft < 0) {
-            goto done;
+            goto extract_complete;
         }
 
         do {
@@ -1818,27 +1822,34 @@ cl_error_t pdf_extract_obj(struct pdf_struct *pdf, struct pdf_obj *obj, uint32_t
         }
     }
 
-done:
+extract_complete:
 
     cli_dbgmsg("pdf_extract_obj: extracted %td bytes %u %u obj\n", sum, obj->id >> 8, obj->id & 0xff);
     cli_dbgmsg("pdf_extract_obj:         ... to %s\n", fullname);
 
     if (flags & PDF_EXTRACT_OBJ_SCAN && sum) {
-        int rc2;
+        cl_error_t rc2;
+        cli_file_t file_type = CL_TYPE_ANY;
+
+        if (obj->flags & (1 << OBJ_JAVASCRIPT)) {
+            file_type = CL_TYPE_JAVASCRIPT;
+            // Note: This scan is of non-normalized javascript, so we don't need to set the LAYER_ATTRIBUTES_NORMALIZE flag.
+            //       For CL_TYPE_JAVASCRIPT, we'll normalize the javascript as-needed in scanners.c.
+        }
 
         /* TODO: invoke bytecode on this pdf obj with metainformation associated */
         lseek(fout, 0, SEEK_SET);
-        rc2 = cli_magic_scan_desc(fout, fullname, pdf->ctx, NULL, LAYER_ATTRIBUTES_NONE);
+        rc2 = cli_magic_scan_desc_type(fout, fullname, pdf->ctx, file_type, NULL, LAYER_ATTRIBUTES_NONE);
         if (rc2 != CL_SUCCESS) {
             rc = rc2;
-            goto really_done;
+            goto done;
         }
 
         if ((rc == CL_CLEAN) || (rc == CL_VIRUS)) {
             rc2 = run_pdf_hooks(pdf, PDF_PHASE_POSTDUMP, fout);
             if (rc2 == CL_VIRUS) {
                 rc = rc2;
-                goto really_done;
+                goto done;
             }
         }
 
@@ -1849,17 +1860,17 @@ done:
             rc2 = pdf_scan_contents(fout, pdf, obj);
             if (rc2 != CL_SUCCESS) {
                 rc = rc2;
-                goto really_done;
+                goto done;
             }
         }
     }
 
-really_done:
+done:
     close(fout);
 
     if (CL_EMEM != rc) {
         if (flags & PDF_EXTRACT_OBJ_SCAN && !pdf->ctx->engine->keeptmp)
-            if (cli_unlink(fullname) && rc != CL_VIRUS)
+            if (cli_unlink(fullname) && rc == CL_SUCCESS)
                 rc = CL_EUNLINK;
     }
 

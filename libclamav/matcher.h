@@ -229,26 +229,56 @@ struct cli_mtarget {
     uint8_t target_count; /* must be synced with non-zero values in the target array */
 };
 
+// clang-format off
+
 #define CLI_MTARGETS 15
 static const struct cli_mtarget cli_mtargets[CLI_MTARGETS] = {
     /* All types for target, name, idx, ac_only, pre-filtering?, # of types */
-    {{CL_TYPE_ANY, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "GENERIC", TARGET_GENERIC, 0, 1, 1},
-    {{CL_TYPE_MSEXE, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "PE", TARGET_PE, 0, 1, 1},
-    {{CL_TYPE_MSOLE2, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "OLE2", TARGET_OLE2, 1, 0, 1},
-    {{CL_TYPE_HTML, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "HTML", TARGET_HTML, 1, 0, 1},
-    {{CL_TYPE_MAIL, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "MAIL", TARGET_MAIL, 1, 1, 1},
-    {{CL_TYPE_GRAPHICS, CL_TYPE_GIF, CL_TYPE_PNG, CL_TYPE_JPEG, CL_TYPE_TIFF, 0, 0, 0, 0, 0}, "GRAPHICS", TARGET_GRAPHICS, 1, 0, 5},
-    {{CL_TYPE_ELF, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "ELF", TARGET_ELF, 1, 0, 1},
-    {{CL_TYPE_TEXT_ASCII, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "ASCII", TARGET_ASCII, 1, 1, 1},
-    {{CL_TYPE_ERROR, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "NOT USED", TARGET_NOT_USED, 1, 0, 1},
-    {{CL_TYPE_MACHO, CL_TYPE_MACHO_UNIBIN, 0, 0, 0, 0, 0, 0, 0, 0}, "MACH-O", TARGET_MACHO, 1, 0, 2},
-    {{CL_TYPE_PDF, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "PDF", TARGET_PDF, 1, 0, 1},
-    {{CL_TYPE_SWF, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "FLASH", TARGET_FLASH, 1, 0, 1},
-    {{CL_TYPE_JAVA, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "JAVA", TARGET_JAVA, 1, 0, 1},
-    {{CL_TYPE_INTERNAL, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "INTERNAL", TARGET_INTERNAL, 1, 0, 1},
-    {{CL_TYPE_OTHER, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "OTHER", TARGET_OTHER, 1, 0, 1}};
+    {{CL_TYPE_ANY, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "GENERIC", TARGET_GENERIC, 0, 1, 1},
 
-// clang-format off
+    {{CL_TYPE_MSEXE, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "PE", TARGET_PE, 0, 1, 1},
+
+    {{CL_TYPE_MSOLE2, CL_TYPE_VBA, 0, 0, 0, 0, 0, 0, 0, 0},
+     "OLE2", TARGET_OLE2, 1, 0, 2},
+
+    {{CL_TYPE_HTML, CL_TYPE_JAVASCRIPT, 0, 0, 0, 0, 0, 0, 0, 0},
+     "HTML", TARGET_HTML, 1, 0, 2},
+
+    {{CL_TYPE_MAIL, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "MAIL", TARGET_MAIL, 1, 1, 1},
+
+    {{CL_TYPE_GRAPHICS, CL_TYPE_GIF, CL_TYPE_PNG, CL_TYPE_JPEG, CL_TYPE_TIFF, 0, 0, 0, 0, 0},
+     "GRAPHICS", TARGET_GRAPHICS, 1, 0, 5},
+
+    {{CL_TYPE_ELF, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "ELF", TARGET_ELF, 1, 0, 1},
+
+    {{CL_TYPE_TEXT_ASCII, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "ASCII", TARGET_ASCII, 1, 1, 1},
+
+    {{CL_TYPE_ERROR, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "NOT USED", TARGET_NOT_USED, 1, 0, 1},
+
+    {{CL_TYPE_MACHO, CL_TYPE_MACHO_UNIBIN, 0, 0, 0, 0, 0, 0, 0, 0},
+     "MACH-O", TARGET_MACHO, 1, 0, 2},
+
+    {{CL_TYPE_PDF, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "PDF", TARGET_PDF, 1, 0, 1},
+
+    {{CL_TYPE_SWF, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "FLASH", TARGET_FLASH, 1, 0, 1},
+
+    {{CL_TYPE_JAVA, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "JAVA", TARGET_JAVA, 1, 0, 1},
+
+    {{CL_TYPE_INTERNAL, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "INTERNAL", TARGET_INTERNAL, 1, 0, 1},
+
+    {{CL_TYPE_OTHER, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     "OTHER", TARGET_OTHER, 1, 0, 1}
+};
 
 #define CLI_OFF_ANY         0xffffffff
 #define CLI_OFF_NONE        0xfffffffe

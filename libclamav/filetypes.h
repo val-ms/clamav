@@ -95,6 +95,10 @@ typedef enum cli_file {
     CL_TYPE_ONENOTE,
     CL_TYPE_PYTHON_COMPILED,
     CL_TYPE_LHA_LZH,
+    CL_TYPE_PYTHON_SCRIPT,
+    CL_TYPE_JAVASCRIPT,
+    CL_TYPE_VBA,
+    CL_TYPE_XLM,
 
     /* Section for partition types */
     CL_TYPE_PART_ANY, /* unknown partition type */

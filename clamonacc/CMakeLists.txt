@@ -49,7 +49,8 @@ target_link_libraries( clamonacc
     PRIVATE
         ClamAV::libclamav
         ClamAV::common
-        CURL::libcurl )
+        CURL::libcurl
+        ${CMAKE_DL_LIBS} )
 install(TARGETS clamonacc DESTINATION ${CMAKE_INSTALL_SBINDIR} COMPONENT programs)
 
 if(SYSTEMD_FOUND)

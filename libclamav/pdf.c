@@ -1868,10 +1868,12 @@ extract_complete:
 done:
     close(fout);
 
-    if (CL_EMEM != rc) {
-        if (flags & PDF_EXTRACT_OBJ_SCAN && !pdf->ctx->engine->keeptmp)
-            if (cli_unlink(fullname) && rc == CL_SUCCESS)
-                rc = CL_EUNLINK;
+    // Delete the temp file, unless keep-temp is enabled OR if the the caller didn't want us to scan it (aka they want the file for some other reason).
+    if (created_tempfile && (flags & PDF_EXTRACT_OBJ_SCAN) && !pdf->ctx->engine->keeptmp) {
+        cl_error_t rc2 = cli_unlink(fullname);
+        if (CL_SUCCESS != rc2 && CL_SUCCESS == rc) {
+            rc = CL_EUNLINK;
+        }
     }
 
     return rc;

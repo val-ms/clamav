@@ -156,7 +156,18 @@ const char *cli_ftname(cli_file_t code);
 void cli_ftfree(const struct cl_engine *engine);
 cli_file_t cli_compare_ftm_file(const unsigned char *buf, size_t buflen, const struct cl_engine *engine);
 cli_file_t cli_compare_ftm_partition(const unsigned char *buf, size_t buflen, const struct cl_engine *engine);
-cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, cli_file_t basetype);
+
+/**
+ * @brief Use file type magic signatures and custom logic to determine the file type, given a previously assigned type.
+ *
+ * @param map       The file map.
+ * @param engine    The engine.
+ * @param basetype  The previously assigned type.
+ * @param type      The determined type.
+ * @return cl_error_t CL_SUCCESS, or some other error code.
+ */
+cl_error_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, cli_file_t basetype, cli_file_t *type);
+
 int cli_addtypesigs(struct cl_engine *engine);
 
 #endif

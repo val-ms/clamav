@@ -107,4 +107,14 @@ size_t cli_strlcat(char *dst, const char *src, size_t sz); /* libclamav/strlcat.
  */
 cl_error_t cli_basename(const char *filepath, size_t filepath_len, char **filebase);
 
+/**
+ * @brief   Check if a string ends with a given extension.
+ *
+ * @param filename  The filename to check.
+ * @param extension The extension to check for.
+ * @return true
+ * @return false
+ */
+bool cli_str_ends_with(const char* filename, const char* extension);
+
 #endif

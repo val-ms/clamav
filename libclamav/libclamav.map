@@ -299,7 +299,7 @@ CLAMAV_PRIVATE {
     readdb_parse_ldb_subsignature;
     fuzzy_hash_calculate_image;
     ffierror_fmt;
-    cli_magic_scan_buff;
+    cli_magic_scan_buff_type;
     cli_checklimits;
     cli_matchmeta;
 

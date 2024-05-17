@@ -281,8 +281,9 @@ const struct ooxml_ftcodes {
         }                                                                       \
     } while (0)
 
-cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, cli_file_t basetype)
+cl_error_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, cli_file_t basetype, cli_file_t *type)
 {
+    cl_error_t status = CL_ERROR;
     unsigned char buffer[MAGIC_BUFFER_SIZE];
     const unsigned char *buff;
     unsigned char *decoded;
@@ -291,10 +292,13 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
     cli_file_t ret = CL_TYPE_BINARY_DATA;
     struct cli_matcher *root;
     struct cli_ac_data mdata;
+    bool ac_data_initialized = false;
+
+    *type = CL_TYPE_ANY;
 
     if (!engine) {
         cli_errmsg("cli_determine_fmap_type: engine == NULL\n");
-        return CL_TYPE_ERROR;
+        goto done;
     }
 
     if (basetype == CL_TYPE_PART_ANY) {
@@ -311,25 +315,33 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
     if (buff) {
         if (CL_SUCCESS != cli_memcpy(buffer, buff, bread)) {
             cli_errmsg("cli_determine_fmap_type: fileread error!\n");
-            return CL_TYPE_ERROR;
+            status = CL_EACCES;
+            goto done;
         }
     } else {
-        return CL_TYPE_ERROR;
+        goto done;
     }
 
     if (basetype == CL_TYPE_PART_ANY) { /* typing a partition */
         ret = cli_compare_ftm_partition(buff, bread, engine);
+        *type = ret;
     } else { /* typing a file */
         ret = cli_compare_ftm_file(buff, bread, engine);
+        *type = ret;
 
         if (ret == CL_TYPE_BINARY_DATA) {
             switch (is_tar(buff, bread)) {
                 case 1:
                     cli_dbgmsg("Recognized old fashioned tar file\n");
-                    return CL_TYPE_OLD_TAR;
+                    *type = CL_TYPE_OLD_TAR;
+                    status = CL_SUCCESS;
+                    goto done;
+
                 case 2:
                     cli_dbgmsg("Recognized POSIX tar file\n");
-                    return CL_TYPE_POSIX_TAR;
+                    *type = CL_TYPE_POSIX_TAR;
+                    status = CL_SUCCESS;
+                    goto done;
             }
         } else if (ret == CL_TYPE_ZIP && bread > 2 * (SIZEOF_LOCAL_HEADER + 5)) {
             const char lhdr_magic[4]    = {0x50, 0x4b, 0x03, 0x04};
@@ -353,7 +365,9 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
                                 if (ooxml_detect[i].type != CL_TYPE_ZIP) {
                                     OOXML_FTIDENTIFIED(ooxml_detect[i].type);
                                     /* returns any unexpected type detection */
-                                    return ooxml_detect[i].type;
+                                    *type = ooxml_detect[i].type;
+                    status = CL_SUCCESS;
+                                    goto done;
                                 }
 
                                 likely_ooxml = 1;
@@ -384,7 +398,8 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
                         zbuff = fmap_need_off_once(map, zoff, zread);
                         if (zbuff == NULL) {
                             cli_dbgmsg("cli_determine_fmap_type: error mapping data for OOXML check\n");
-                            return CL_TYPE_ERROR;
+                            status = CL_EREAD;
+                            goto done;
                         }
                         zoff += zread;
                         znamep = zbuff;
@@ -399,9 +414,13 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
             int iret = cli_mbr_check(buff, bread, map->len);
             if (iret == CL_TYPE_GPT) {
                 cli_dbgmsg("Recognized GUID Partition Table file\n");
-                return CL_TYPE_GPT;
+                *type = CL_TYPE_GPT;
+                    status = CL_SUCCESS;
+                goto done;
             } else if (iret == CL_CLEAN) {
-                return CL_TYPE_MBR;
+                *type = CL_TYPE_MBR;
+                    status = CL_SUCCESS;
+                goto done;
             }
 
             /* re-detect type */
@@ -415,11 +434,15 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
          * misidentified as BINARY_DATA by cli_compare_ftm_file()
          */
         root = engine->root[0];
-        if (!root)
-            return ret;
+        if (!root) {
+                    status = CL_SUCCESS;
+            goto done;
+        }
 
-        if (cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))
-            return ret;
+        if (cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN)) {
+            goto done;
+        }
+        ac_data_initialized = true;
 
         scan_ret = (cli_file_t)cli_ac_scanbuff(buff, bread, NULL, NULL, NULL, engine->root[0], &mdata, 0, ret, NULL, AC_SCAN_FT, NULL);
 
@@ -433,19 +456,22 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
              (scan_ret != CL_TYPE_EGGSFX) &&
              (scan_ret != CL_TYPE_CABSFX) &&
              (scan_ret != CL_TYPE_7ZSFX))) {
-            ret = scan_ret;
+            *type = scan_ret;
         } else {
-            if (cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))
-                return ret;
+            if (cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN)) {
+                goto done;
+            }
 
             decoded = (unsigned char *)cli_utf16toascii((char *)buff, bread);
             if (decoded) {
                 scan_ret = (cli_file_t)cli_ac_scanbuff(decoded, bread / 2, NULL, NULL, NULL, engine->root[0], &mdata, 0, CL_TYPE_TEXT_ASCII, NULL, AC_SCAN_FT, NULL);
                 free(decoded);
-                if (scan_ret == CL_TYPE_HTML)
-                    ret = CL_TYPE_HTML_UTF16;
+                if (scan_ret == CL_TYPE_HTML) {
+                    *type = CL_TYPE_HTML_UTF16;
+                }
             }
             cli_ac_freedata(&mdata);
+            ac_data_initialized = false;
 
             if ((((struct cli_dconf *)engine->dconf)->phishing & PHISHING_CONF_ENTCONV) && ret != CL_TYPE_HTML_UTF16) {
                 const char *encoding;
@@ -471,24 +497,48 @@ cli_file_t cli_determine_fmap_type(fmap_t *map, const struct cl_engine *engine, 
                      * However when detecting whether a file is HTML or not, we need exact conversion.
                      * (just eliminating zeros and matching would introduce false positives */
                     if (encoding_normalize_toascii(&in_area, encoding, &out_area) >= 0 && out_area.length > 0) {
-                        if (cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN))
-                            return ret;
+                        if (cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, root->ac_reloff_num, CLI_DEFAULT_AC_TRACKLEN)) {
+                            goto done;
+                        }
+                        ac_data_initialized = true;
 
                         if (out_area.length > 0) {
                             scan_ret = (cli_file_t)cli_ac_scanbuff(decodedbuff, out_area.length, NULL, NULL, NULL, engine->root[0], &mdata, 0, 0, NULL, AC_SCAN_FT, NULL); /* FIXME: can we use CL_TYPE_TEXT_ASCII instead of 0? */
                             if (scan_ret == CL_TYPE_HTML) {
                                 cli_dbgmsg("cli_determine_fmap_type: detected HTML signature in Unicode file\n");
                                 /* htmlnorm is able to handle any unicode now, since it skips null chars */
-                                ret = CL_TYPE_HTML;
+                                *type = CL_TYPE_HTML;
                             }
                         }
-
-                        cli_ac_freedata(&mdata);
                     }
                 }
             }
         }
     }
 
-    return ret;
+    // For text and binary files, use the file extension to refine the file type.
+    if (map->name != NULL && *type >= CL_TYPE_TEXT_ASCII && *type <= CL_TYPE_BINARY_DATA) {
+        if (cli_str_ends_with(map->name, ".js")) {
+            // If filename ends with .js, treat it as a JavaScript file.
+            *type = CL_TYPE_JAVASCRIPT;
+
+        } else if (cli_str_ends_with(map->name, ".vbs") || cli_str_ends_with(map->name, ".vba")) {
+            // If filename ends with .vbs, treat it as a VBScript file.
+            // If filename ends with .vba, treat it as a VBA file.
+            *type = CL_TYPE_VBA;
+
+        } else if (cli_str_ends_with(map->name, ".py")) {
+            // If filename ends with .py, treat it as a Python script.
+            *type = CL_TYPE_PYTHON_SCRIPT;
+        }
+    }
+
+    status = CL_SUCCESS;
+
+done:
+    if (ac_data_initialized) {
+        cli_ac_freedata(&mdata);
+    }
+
+    return status;
 }

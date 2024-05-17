@@ -38,12 +38,12 @@ use crate::{
     onenote::OneNote,
     sys::{
         cl_error_t, cl_error_t_CL_EFORMAT, cl_error_t_CL_ERROR, cl_error_t_CL_SUCCESS, cli_ctx,
-        cli_magic_scan_buff,
+        cli_file_CL_TYPE_ANY, cli_magic_scan_buff_type,
     },
     util::{check_scan_limits, scan_archive_metadata},
 };
 
-/// Rust wrapper of libclamav's cli_magic_scan_buff() function.
+/// Rust wrapper of libclamav's cli_magic_scan_buff_type() function.
 /// Use magic sigs to identify the file type and then scan it.
 pub fn magic_scan(ctx: *mut cli_ctx, buf: &[u8], name: Option<String>) -> cl_error_t {
     let ptr = buf.as_ptr();
@@ -69,10 +69,19 @@ pub fn magic_scan(ctx: *mut cli_ctx, buf: &[u8], name: Option<String>) -> cl_err
         Err(_) => null_mut(),
     };
 
-    let ret = unsafe { cli_magic_scan_buff(ptr as *const c_void, len, ctx, name_ptr, 0) };
+    let ret = unsafe {
+        cli_magic_scan_buff_type(
+            ptr as *const c_void,
+            len,
+            ctx,
+            cli_file_CL_TYPE_ANY,
+            name_ptr,
+            0,
+        )
+    };
 
     if ret != cl_error_t_CL_SUCCESS {
-        debug!("cli_magic_scan_buff returned error: {}", ret);
+        debug!("cli_magic_scan_buff_type returned error: {}", ret);
     }
 
     // Okay now safe to drop the name CString.

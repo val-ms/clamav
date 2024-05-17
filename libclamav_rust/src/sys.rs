@@ -1200,10 +1200,11 @@ pub type css_image_extractor_t = *mut ::std::os::raw::c_void;
 pub type css_image_handle_t = *mut ::std::os::raw::c_void;
 extern "C" {
     #[doc = " @brief   Convenience wrapper for cli_magic_scan_nested_fmap_type().\n\n Creates an fmap and calls cli_magic_scan_nested_fmap_type() for you, with type CL_TYPE_ANY.\n\n @param buffer        Pointer to the buffer to be scanned.\n @param length        Size in bytes of the buffer being scanned.\n @param ctx           Scanning context structure.\n @param name          (optional) Original name of the file (to set fmap name metadata)\n @param attributes    Layer attributes of the file being scanned (is it normalized, decrypted, etc)\n @return int          CL_SUCCESS, or an error code."]
-    pub fn cli_magic_scan_buff(
+    pub fn cli_magic_scan_buff_type(
         buffer: *const ::std::os::raw::c_void,
         length: usize,
         ctx: *mut cli_ctx,
+        ctx: cli_file_t,
         name: *const ::std::os::raw::c_char,
         attributes: u32,
     ) -> cl_error_t;

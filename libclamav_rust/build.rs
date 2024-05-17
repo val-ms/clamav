@@ -52,7 +52,7 @@ const BINDGEN_FUNCTIONS: &[&str] = &[
     "cli_versig2",
     "cli_getdsig",
     "cli_get_debug_flag",
-    "cli_magic_scan_buff",
+    "cli_magic_scan_buff_type",
     "cli_checklimits",
     "cli_matchmeta",
 ];

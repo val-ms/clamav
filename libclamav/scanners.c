@@ -291,7 +291,7 @@ static cl_error_t cli_scanrar_file(const char *filepath, int desc, cli_ctx *ctx)
         }
 
         /* Scan the comment */
-        status = cli_magic_scan_buff(comment, comment_size, ctx, NULL, LAYER_ATTRIBUTES_NONE);
+        status = cli_magic_scan_buff_type(comment, comment_size, ctx, CL_TYPE_ANY, NULL, LAYER_ATTRIBUTES_NONE);
         if (status != CL_SUCCESS) {
             goto done;
         }
@@ -711,7 +711,7 @@ static cl_error_t cli_scanegg(cli_ctx *ctx)
             /*
              * Scan the comment.
              */
-            status = cli_magic_scan_buff(comments[i], strlen(comments[i]), ctx, NULL, LAYER_ATTRIBUTES_NONE);
+            status = cli_magic_scan_buff_type(comments[i], strlen(comments[i]), ctx, CL_TYPE_ANY, NULL, LAYER_ATTRIBUTES_NONE);
             if (status != CL_SUCCESS) {
                 goto done;
             }
@@ -872,7 +872,7 @@ static cl_error_t cli_scanegg(cli_ctx *ctx)
                      * Scan the extracted file...
                      */
                     cli_dbgmsg("EGG: Extraction complete.  Scanning now...\n");
-                    status = cli_magic_scan_buff(extract_buffer, extract_buffer_len, ctx, filename_base, LAYER_ATTRIBUTES_NONE);
+                    status = cli_magic_scan_buff_type(extract_buffer, extract_buffer_len, ctx, CL_TYPE_ANY, filename_base, LAYER_ATTRIBUTES_NONE);
                     if (status != CL_SUCCESS) {
                         goto done;
                     }
@@ -1468,7 +1468,7 @@ static cl_error_t cli_scanszdd(cli_ctx *ctx)
     return ret;
 }
 
-static cl_error_t scandata(const unsigned char *data, size_t len, cli_ctx *ctx, cli_file_t file_type)
+static cl_error_t cli_scandata(const unsigned char *data, size_t len, cli_ctx *ctx, cli_file_t file_type)
 {
     cl_error_t ret                      = CL_SUCCESS;
     struct cli_matcher *generic_ac_root = ctx->engine->root[0];
@@ -1901,7 +1901,7 @@ static cl_error_t cli_ole2_tempdir_scan_vba(const char *dir, cli_ctx *ctx, struc
                         proj_contents_fname = NULL;
                     }
 
-                    status = scandata(data, data_len, ctx, CL_TYPE_VBA);
+                    status = cli_magic_scan_buff_type(data, data_len, ctx, CL_TYPE_VBA, NULL, LAYER_ATTRIBUTES_NONE);
                     if (CL_SUCCESS != status) {
                         goto done;
                     }
@@ -1987,7 +1987,7 @@ static cl_error_t cli_ole2_tempdir_scan_vba(const char *dir, cli_ctx *ctx, struc
                     *ctx->scanned += vba_project->length[i] / CL_COUNT_PRECISION;
                 }
 
-                status = scandata(data, vba_project->length[i], ctx, CL_TYPE_VBA);
+                status = cli_magic_scan_buff_type(data, vba_project->length[i], ctx, CL_TYPE_VBA, NULL, LAYER_ATTRIBUTES_NONE);
                 if (CL_SUCCESS != status) {
                     goto done;
                 }
@@ -4309,10 +4309,12 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
      */
     perf_start(ctx, PERFT_FT);
     if ((type == CL_TYPE_ANY) || type == CL_TYPE_PART_ANY) {
-        type = cli_determine_fmap_type(ctx->fmap, ctx->engine, type);
+        cli_file_t new_type;
+        ret = cli_determine_fmap_type(ctx->fmap, ctx->engine, type, &new_type);
+        type = new_type;
     }
     perf_stop(ctx, PERFT_FT);
-    if (type == CL_TYPE_ERROR) {
+    if (ret != CL_SUCCESS) {
         cli_dbgmsg("cli_magic_scan: cli_determine_fmap_type returned CL_TYPE_ERROR\n");
         ret = CL_EREAD;
         cli_dbgmsg("cli_magic_scan: returning %d %s (no post, no cache)\n", ret, __AT__);
@@ -5374,7 +5376,7 @@ cl_error_t cli_magic_scan_nested_fmap_type(cl_fmap_t *map, size_t offset, size_t
     return ret;
 }
 
-cl_error_t cli_magic_scan_buff(const void *buffer, size_t length, cli_ctx *ctx, const char *name, uint32_t attributes)
+cl_error_t cli_magic_scan_buff_type(const void *buffer, size_t length, cli_ctx *ctx, cli_file_t type, const char *name, uint32_t attributes)
 {
     cl_error_t ret;
     fmap_t *map = NULL;
@@ -5384,7 +5386,7 @@ cl_error_t cli_magic_scan_buff(const void *buffer, size_t length, cli_ctx *ctx, 
         return CL_EMAP;
     }
 
-    ret = cli_magic_scan_nested_fmap_type(map, 0, length, ctx, CL_TYPE_ANY, name, attributes);
+    ret = cli_magic_scan_nested_fmap_type(map, 0, length, ctx, type, name, attributes);
 
     funmap(map);
 
@@ -5597,7 +5599,7 @@ static cl_error_t scan_common(cl_fmap_t *map, const char *filepath, const char *
             if (status != CL_VIRUS && (iroot->ac_lsigs || iroot->ac_patterns || iroot->pcre_metas)) {
                 cli_dbgmsg("scan_common: running deprecated preclass bytecodes for target type 13\n");
                 ctx.options->general &= ~CL_SCAN_GENERAL_COLLECT_METADATA;
-                status = cli_magic_scan_buff(jstring, strlen(jstring), &ctx, NULL, LAYER_ATTRIBUTES_NONE);
+                status = cli_magic_scan_buff_type(jstring, strlen(jstring), &ctx, CL_TYPE_INTERNAL, NULL, LAYER_ATTRIBUTES_NONE);
             }
         }
 

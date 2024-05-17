@@ -1097,3 +1097,19 @@ cl_error_t cli_basename(const char *filepath, size_t filepath_len,
 done:
     return status;
 }
+
+bool cli_str_ends_with(const char* filename, const char* extension)
+{
+    if (!filename || !extension) {
+        return false;
+    }
+
+    size_t filename_len = strlen(filename);
+    size_t extension_len = strlen(extension);
+
+    if (filename_len < extension_len) {
+        return false;
+    }
+
+    return (0 == strncmp(filename + filename_len - extension_len, extension, extension_len));
+}

@@ -538,11 +538,6 @@ static unsigned skip_files(void)
     unsigned skipped = 0;
 
     /* skip .rar files if unrar is disabled */
-    const char *s = getenv("unrar_disabled");
-    if (s && !strcmp(s, "1")) {
-        skipped += 2;
-    }
-
 #if HAVE_UNRAR
 #else
     skipped += 2;

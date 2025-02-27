@@ -1256,7 +1256,7 @@ cl_error_t index_local_file_headers_within_bounds(
                                             coff,
                                             fsize - coff,
                                             NULL,
-                                            total_file_count,
+                                            total_file_count + 1,
                                             NULL,
                                             &ret,
                                             ctx,

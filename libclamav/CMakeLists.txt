@@ -58,7 +58,7 @@ target_sources( lzma_sdk
         7z/7zCrcOpt.c
         7z/7zDec.c
         7z/7zFile.c
-        7z/7zIn.c
+        7z/7zArcIn.c
         7z/7zStream.c
         7z/Bcj2.c
         7z/Bra.c
@@ -70,6 +70,9 @@ target_sources( lzma_sdk
         7z/LzmaDec.c
         7z/Ppmd7.c
         7z/Ppmd7Dec.c
+        7z/Sha256.c
+        7z/MtDec.c
+        7z/Threads.c
         7z/Xz.c
         7z/XzCrc64.c
         7z/XzDec.c
@@ -81,7 +84,10 @@ target_sources( lzma_sdk
         7z/7zFile.h
         7z/XzCrc64.h
         7z/RotateDefs.h
-        7z/Types.h
+        7z/7zTypes.h
+        7z/Sha256.h
+        7z/MtDec.h
+        7z/Threads.h
         7z/Ppmd7.h
         7z/LzmaDec.h
         7z/Ppmd.h

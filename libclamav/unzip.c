@@ -575,7 +575,11 @@ static inline cl_error_t zdecrypt(
             pass_any = pass_any->next;
     }
 
-    cli_dbgmsg("cli_unzip: decrypt - skipping encrypted file, no valid passwords\n");
+    cli_dbgmsg("cli_unzip: decrypt failed - will attempt to unzip as if it were not encrypted\n");
+
+    ret = unz(src, csize, usize, LOCAL_HEADER_method, LOCAL_HEADER_flags,
+              num_files_unzipped, ctx, tmpd, zcb, original_filename, false);
+
     return CL_SUCCESS;
 }
 

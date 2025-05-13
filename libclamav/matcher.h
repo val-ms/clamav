@@ -343,7 +343,7 @@ cl_error_t cli_scan_desc(int desc, cli_ctx *ctx, cli_file_t ftype, bool filetype
  * @param[out] ftoffset (optional) A list of file type signature matches with their corresponding offsets. If provided, will output the file type signature matches.
  * @param acmode        Use AC_SCAN_VIR and AC_SCAN_FT to set scanning modes.
  * @param[out] acres    A list of cli_ac_result AC pattern matching results.
- * @param refhash       MD5 hash of the current file, used to save time creating hashes and to limit scan recursion for the HandlerType logical signature FTM feature.
+ * @param refhash       SHA256 hash of the current file, used to save time creating hashes and to limit scan recursion for the HandlerType logical signature FTM feature.
  * @return cl_error_t
  */
 cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, struct cli_matched_type **ftoffset, unsigned int acmode, struct cli_ac_result **acres, unsigned char *refhash);

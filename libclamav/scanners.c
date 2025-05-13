@@ -4863,7 +4863,7 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
      * Get the maphash, if necessary
      */
     if (cache_enabled || (SCAN_COLLECT_METADATA)) {
-        if (CL_SUCCESS != fmap_get_hash(ctx->fmap, &hash, CLI_HASH_MD5)) {
+        if (CL_SUCCESS != fmap_get_hash(ctx->fmap, &hash, CLI_HASH_SHA2_256)) {
             cli_dbgmsg("cli_magic_scan: Failed to get a hash for the current fmap.\n");
 
             // It may be that the file was truncated between the time we started the scan and the time we got the hash.
@@ -4894,12 +4894,14 @@ cl_error_t cli_magic_scan(cli_ctx *ctx, cli_file_t type)
     }
 
     if (SCAN_COLLECT_METADATA) {
-        char hashstr[CLI_HASHLEN_MD5 * 2 + 1];
-        snprintf(hashstr, CLI_HASHLEN_MD5 * 2 + 1, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+        char hashstr[SHA256_HASH_SIZE * 2 + 1];
+        snprintf(hashstr, SHA256_HASH_SIZE * 2 + 1, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
                  hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7],
-                 hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
+                 hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15],
+                 hash[16], hash[17], hash[18], hash[19], hash[20], hash[21], hash[22], hash[23],
+                 hash[24], hash[25], hash[26], hash[27], hash[28], hash[29], hash[30], hash[31]);
 
-        ret = cli_jsonstr(ctx->wrkproperty, "FileMD5", hashstr);
+        ret = cli_jsonstr(ctx->wrkproperty, "FileSHA256", hashstr);
         if (ret != CL_SUCCESS) {
             cli_dbgmsg("cli_magic_scan: returning %d %s (no post, no cache)\n", ret, __AT__);
             goto early_ret;

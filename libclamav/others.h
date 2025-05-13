@@ -207,7 +207,7 @@ typedef struct cli_ctx_tag {
     uint32_t recursion_stack_size;      /* stack size must == engine->max_recursion_level */
     uint32_t recursion_level;           /* Index into recursion_stack; current fmap recursion level from start of scan. */
     fmap_t *fmap;                       /* Pointer to current fmap in recursion_stack, varies with recursion depth. For convenience. */
-    unsigned char handlertype_hash[16];
+    unsigned char handlertype_hash[SHA256_HASH_SIZE];
     struct cli_dconf *dconf;
     bitset_t *hook_lsig_matches;
     void *cb_ctx;

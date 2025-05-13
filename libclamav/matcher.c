@@ -572,14 +572,14 @@ void cli_targetinfo_destroy(struct cli_target_info *info)
 cl_error_t cli_check_fp(cli_ctx *ctx, const char *vname)
 {
     cl_error_t status = CL_VIRUS;
-    char md5[33];
+    uint8_t md5[MD5_HASH_SIZE * 2 + 1];
     unsigned int i;
     const char *virname = NULL;
     fmap_t *map;
     int32_t stack_index;
     const char *ptr;
-    uint8_t shash1[SHA1_HASH_SIZE * 2 + 1];
-    uint8_t shash256[SHA256_HASH_SIZE * 2 + 1];
+    uint8_t sha1[SHA1_HASH_SIZE * 2 + 1];
+    uint8_t sha256[SHA256_HASH_SIZE * 2 + 1];
     int have_sha1, have_sha256;
     unsigned char *digest;
     size_t size;
@@ -589,7 +589,7 @@ cl_error_t cli_check_fp(cli_ctx *ctx, const char *vname)
     while (stack_index >= 0) {
         map = ctx->recursion_stack[stack_index].fmap;
 
-        if (CL_SUCCESS != fmap_get_hash(map, &digest, CLI_HASH_MD5)) {
+        if (CL_SUCCESS != fmap_get_hash(map, &digest, CLI_HASH_SHA2_256)) {
             cli_dbgmsg("cli_check_fp: Failed to get a hash for the map at stack index # %u\n", stack_index);
             stack_index--;
             continue;
@@ -597,14 +597,14 @@ cl_error_t cli_check_fp(cli_ctx *ctx, const char *vname)
         size = map->len;
 
         /*
-         * First, check the MD5 digest.
-         * MD5 is default, so it always exists.
+         * First, check the SHA256 digest.
+         * SHA256 is default, so it always exists.
          */
-        if (cli_hm_scan(digest, size, &virname, ctx->engine->hm_fp, CLI_HASH_MD5) == CL_VIRUS) {
-            cli_dbgmsg("cli_check_fp(md5): Found false positive detection (fp sig: %s), size: %d\n", virname, (int)size);
+        if (cli_hm_scan(digest, size, &virname, ctx->engine->hm_fp, CLI_HASH_SHA2_256) == CL_VIRUS) {
+            cli_dbgmsg("cli_check_fp(sha256): Found false positive detection (fp sig: %s), size: %d\n", virname, (int)size);
             return CL_CLEAN;
-        } else if (cli_hm_scan_wild(digest, &virname, ctx->engine->hm_fp, CLI_HASH_MD5) == CL_VIRUS) {
-            cli_dbgmsg("cli_check_fp(md5): Found false positive detection (fp sig: %s), size: *\n", virname);
+        } else if (cli_hm_scan_wild(digest, &virname, ctx->engine->hm_fp, CLI_HASH_SHA2_256) == CL_VIRUS) {
+            cli_dbgmsg("cli_check_fp(sha256): Found false positive detection (fp sig: %s), size: *\n", virname);
             return CL_CLEAN;
         }
 
@@ -612,51 +612,51 @@ cl_error_t cli_check_fp(cli_ctx *ctx, const char *vname)
             const char *name = ctx->recursion_stack[stack_index].fmap->name;
             const char *type = cli_ftname(ctx->recursion_stack[stack_index].type);
 
-            for (i = 0; i < 16; i++)
-                sprintf(md5 + i * 2, "%02x", digest[i]);
-            md5[32] = 0;
+            for (i = 0; i < SHA256_HASH_SIZE; i++)
+                sprintf(sha256 + i * 2, "%02x", digest[i]);
+            sha256[SHA256_HASH_SIZE * 2] = 0;
 
             cli_dbgmsg("FP SIGNATURE: %s:%u:%s  # Name: %s, Type: %s\n",
-                       md5, (unsigned int)size, vname ? vname : "Name", name ? name : "n/a", type);
+                       sha256, (unsigned int)size, vname ? vname : "Name", name ? name : "n/a", type);
         }
 
         have_sha1   = cli_hm_have_size(ctx->engine->hm_fp, CLI_HASH_SHA1, size) || cli_hm_have_wild(ctx->engine->hm_fp, CLI_HASH_SHA1) || cli_hm_have_size(ctx->engine->hm_fp, CLI_HASH_SHA1, 1);
-        have_sha256 = cli_hm_have_size(ctx->engine->hm_fp, CLI_HASH_SHA256, size) || cli_hm_have_wild(ctx->engine->hm_fp, CLI_HASH_SHA256);
+        have_sha256 = cli_hm_have_size(ctx->engine->hm_fp, CLI_HASH_SHA2_256, size) || cli_hm_have_wild(ctx->engine->hm_fp, CLI_HASH_SHA2_256);
         if (have_sha1 || have_sha256) {
             if ((ptr = fmap_need_off_once(map, 0, size))) {
                 if (have_sha1) {
-                    cl_sha1(ptr, size, &shash1[SHA1_HASH_SIZE], NULL);
+                    cl_sha1(ptr, size, &sha1[SHA1_HASH_SIZE], NULL);
 
-                    if (cli_hm_scan(&shash1[SHA1_HASH_SIZE], size, &virname, ctx->engine->hm_fp, CLI_HASH_SHA1) == CL_VIRUS) {
+                    if (cli_hm_scan(&sha1[SHA1_HASH_SIZE], size, &virname, ctx->engine->hm_fp, CLI_HASH_SHA1) == CL_VIRUS) {
                         cli_dbgmsg("cli_check_fp(sha1): Found false positive detection (fp sig: %s)\n", virname);
                         return CL_CLEAN;
                     }
-                    if (cli_hm_scan_wild(&shash1[SHA1_HASH_SIZE], &virname, ctx->engine->hm_fp, CLI_HASH_SHA1) == CL_VIRUS) {
+                    if (cli_hm_scan_wild(&sha1[SHA1_HASH_SIZE], &virname, ctx->engine->hm_fp, CLI_HASH_SHA1) == CL_VIRUS) {
                         cli_dbgmsg("cli_check_fp(sha1): Found false positive detection (fp sig: %s)\n", virname);
                         return CL_CLEAN;
                     }
                     /* See whether the hash matches those loaded in from .cat files
                      * (associated with the .CAB file type) */
-                    if (cli_hm_scan(&shash1[SHA1_HASH_SIZE], 1, &virname, ctx->engine->hm_fp, CLI_HASH_SHA1) == CL_VIRUS) {
+                    if (cli_hm_scan(&sha1[SHA1_HASH_SIZE], 1, &virname, ctx->engine->hm_fp, CLI_HASH_SHA1) == CL_VIRUS) {
                         cli_dbgmsg("cli_check_fp(sha1): Found .CAB false positive detection via catalog file\n");
                         return CL_CLEAN;
                     }
                 }
 
                 if (have_sha256) {
-                    cl_sha256(ptr, size, &shash256[SHA256_HASH_SIZE], NULL);
+                    cl_sha256(ptr, size, &sha256[SHA256_HASH_SIZE], NULL);
 
-                    if (cli_hm_scan(&shash256[SHA256_HASH_SIZE], size, &virname, ctx->engine->hm_fp, CLI_HASH_SHA256) == CL_VIRUS) {
+                    if (cli_hm_scan(&sha256[SHA256_HASH_SIZE], size, &virname, ctx->engine->hm_fp, CLI_HASH_SHA2_256) == CL_VIRUS) {
                         cli_dbgmsg("cli_check_fp(sha256): Found false positive detection (fp sig: %s)\n", virname);
                         return CL_CLEAN;
                     }
-                    if (cli_hm_scan_wild(&shash256[SHA256_HASH_SIZE], &virname, ctx->engine->hm_fp, CLI_HASH_SHA256) == CL_VIRUS) {
+                    if (cli_hm_scan_wild(&sha256[SHA256_HASH_SIZE], &virname, ctx->engine->hm_fp, CLI_HASH_SHA2_256) == CL_VIRUS) {
                         cli_dbgmsg("cli_check_fp(sha256): Found false positive detection (fp sig: %s)\n", virname);
                         return CL_CLEAN;
                     }
                     /* See whether the hash matches those loaded in from .cat files
                      * (associated with the .CAB file type) */
-                    if (cli_hm_scan(&shash256[SHA256_HASH_SIZE], 1, &virname, ctx->engine->hm_fp, CLI_HASH_SHA256) == CL_VIRUS) {
+                    if (cli_hm_scan(&sha256[SHA256_HASH_SIZE], 1, &virname, ctx->engine->hm_fp, CLI_HASH_SHA2_256) == CL_VIRUS) {
                         cli_dbgmsg("cli_check_fp(sha256): Found .CAB false positive detection via catalog file\n");
                         return CL_CLEAN;
                     }
@@ -668,21 +668,21 @@ cl_error_t cli_check_fp(cli_ctx *ctx, const char *vname)
         if (SCAN_DEV_COLLECT_SHA && (ctx->sha_collect > 0)) {
             if ((ptr = fmap_need_off_once(map, 0, size))) {
                 if (!have_sha256)
-                    cl_sha256(ptr, size, shash256 + SHA256_HASH_SIZE, NULL);
+                    cl_sha256(ptr, size, sha256 + SHA256_HASH_SIZE, NULL);
 
                 for (i = 0; i < SHA256_HASH_SIZE; i++)
-                    sprintf((char *)shash256 + i * 2, "%02x", shash256[SHA256_HASH_SIZE + i]);
+                    sprintf((char *)sha256 + i * 2, "%02x", sha256[SHA256_HASH_SIZE + i]);
 
                 if (!have_sha1)
-                    cl_sha1(ptr, size, shash1 + SHA1_HASH_SIZE);
+                    cl_sha1(ptr, size, sha1 + SHA1_HASH_SIZE);
 
                 for (i = 0; i < SHA1_HASH_SIZE; i++)
-                    sprintf((char *)shash1 + i * 2, "%02x", shash1[SHA1_HASH_SIZE + i]);
+                    sprintf((char *)sha1 + i * 2, "%02x", sha1[SHA1_HASH_SIZE + i]);
 
                 if (NULL == ctx->target_filepath) {
-                    cli_errmsg("COLLECT:%s:%s:%u:%s:%s\n", shash256, shash1, size, vname ? vname : "noname", "NO_IDEA");
+                    cli_errmsg("COLLECT:%s:%s:%u:%s:%s\n", sha256, sha1, size, vname ? vname : "noname", "NO_IDEA");
                 } else {
-                    cli_errmsg("COLLECT:%s:%s:%u:%s:%s\n", shash256, shash1, size, vname ? vname : "noname", ctx->target_filepath);
+                    cli_errmsg("COLLECT:%s:%s:%u:%s:%s\n", sha256, sha1, size, vname ? vname : "noname", ctx->target_filepath);
                 }
             } else
                 cli_errmsg("can't compute sha\n!");
@@ -893,7 +893,7 @@ static cl_error_t lsig_eval(cli_ctx *ctx, struct cli_matcher *root, struct cli_a
         // Instead of alerting, we'll make a duplicate fmap (add recursion depth, to prevent infinite loops) and
         // scan the file with the handler type.
 
-        if (hash && 0 != memcmp(ctx->handlertype_hash, hash, 16)) {
+        if (hash && 0 != memcmp(ctx->handlertype_hash, hash, SHA256_HASH_SIZE)) {
             /*
              * Create an fmap window into our current fmap using the original offset & length, and rescan as the new type
              *
@@ -910,7 +910,7 @@ static cl_error_t lsig_eval(cli_ctx *ctx, struct cli_matcher *root, struct cli_a
                 goto done;
             }
 
-            memcpy(ctx->handlertype_hash, hash, 16);
+            memcpy(ctx->handlertype_hash, hash, SHA256_HASH_SIZE);
 
             status = cli_recursion_stack_push(ctx, new_map, ac_lsig->tdb.handlertype[0], true, LAYER_ATTRIBUTES_NONE); /* Perform scan with child fmap */
             if (CL_SUCCESS != status) {
@@ -1245,18 +1245,13 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
            matching with the AC & BM pattern matchers is an optimization so we
            we can do both processes while the cache is still hot. */
 
-        if (!refhash) {
-            if (cli_hm_have_size(hdb, CLI_HASH_MD5, ctx->fmap->len) ||
-                cli_hm_have_size(fp, CLI_HASH_MD5, ctx->fmap->len) ||
-                cli_hm_have_wild(hdb, CLI_HASH_MD5) ||
-                cli_hm_have_wild(fp, CLI_HASH_MD5)) {
-                compute_hash[CLI_HASH_MD5] = true;
-            } else {
-                compute_hash[CLI_HASH_MD5] = false;
-            }
+        if (cli_hm_have_size(hdb, CLI_HASH_MD5, ctx->fmap->len) ||
+            cli_hm_have_wild(hdb, CLI_HASH_MD5) ||
+            cli_hm_have_size(fp, CLI_HASH_MD5, ctx->fmap->len) ||
+            cli_hm_have_wild(fp, CLI_HASH_MD5)) {
+            compute_hash[CLI_HASH_MD5] = true;
         } else {
-            compute_hash[CLI_HASH_MD5] = 0;
-            memcpy(digest[CLI_HASH_MD5], refhash, 16);
+            compute_hash[CLI_HASH_MD5] = false;
         }
 
         if (cli_hm_have_size(hdb, CLI_HASH_SHA1, ctx->fmap->len) ||
@@ -1268,13 +1263,18 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
             compute_hash[CLI_HASH_SHA1] = false;
         }
 
-        if (cli_hm_have_size(hdb, CLI_HASH_SHA256, ctx->fmap->len) ||
-            cli_hm_have_wild(hdb, CLI_HASH_SHA256) ||
-            cli_hm_have_size(fp, CLI_HASH_SHA256, ctx->fmap->len) ||
-            cli_hm_have_wild(fp, CLI_HASH_SHA256)) {
-            compute_hash[CLI_HASH_SHA256] = true;
+        if (!refhash) {
+            if (cli_hm_have_size(hdb, CLI_HASH_SHA2_256, ctx->fmap->len) ||
+                cli_hm_have_wild(hdb, CLI_HASH_SHA2_256) ||
+                cli_hm_have_size(fp, CLI_HASH_SHA2_256, ctx->fmap->len) ||
+                cli_hm_have_wild(fp, CLI_HASH_SHA2_256)) {
+                compute_hash[CLI_HASH_SHA2_256] = true;
+            } else {
+                compute_hash[CLI_HASH_SHA2_256] = false;
+            }
         } else {
-            compute_hash[CLI_HASH_SHA256] = false;
+            compute_hash[CLI_HASH_SHA2_256] = false;
+            memcpy(digest[CLI_HASH_SHA2_256], refhash, SHA256_HASH_SIZE);
         }
     }
 
@@ -1327,7 +1327,7 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
                     cl_update_hash(md5ctx, (void *)data, data_len);
                 if (compute_hash[CLI_HASH_SHA1])
                     cl_update_hash(sha1ctx, (void *)data, data_len);
-                if (compute_hash[CLI_HASH_SHA256])
+                if (compute_hash[CLI_HASH_SHA2_256])
                     cl_update_hash(sha256ctx, (void *)data, data_len);
             }
         }
@@ -1351,10 +1351,6 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
             // Save the MD5 hash for later use (e.g. in FP checks).
             fmap_set_hash(ctx->fmap, digest[CLI_HASH_MD5], CLI_HASH_MD5);
         }
-        if (refhash) {
-            // Set "compute_hash" to 1 because we'll use this later to know if we have a hash to check.
-            compute_hash[CLI_HASH_MD5] = 1;
-        }
 
         if (compute_hash[CLI_HASH_SHA1]) {
             cl_finish_hash(sha1ctx, digest[CLI_HASH_SHA1]);
@@ -1363,12 +1359,16 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
             // Save the SHA1 hash for later use (e.g. in FP checks).
             fmap_set_hash(ctx->fmap, digest[CLI_HASH_SHA1], CLI_HASH_SHA1);
         }
-        if (compute_hash[CLI_HASH_SHA256]) {
-            cl_finish_hash(sha256ctx, digest[CLI_HASH_SHA256]);
+        if (compute_hash[CLI_HASH_SHA2_256]) {
+            cl_finish_hash(sha256ctx, digest[CLI_HASH_SHA2_256]);
             sha256ctx = NULL;
 
             // Save the SHA256 hash for later use (e.g. in FP checks).
-            fmap_set_hash(ctx->fmap, digest[CLI_HASH_SHA256], CLI_HASH_SHA256);
+            fmap_set_hash(ctx->fmap, digest[CLI_HASH_SHA2_256], CLI_HASH_SHA2_256);
+        }
+        if (refhash) {
+            // Set "compute_hash" to true because we'll use this later to know if we have a hash to check.
+            compute_hash[CLI_HASH_SHA2_256] = true;
         }
 
         for (hashtype = CLI_HASH_MD5; hashtype < CLI_HASH_AVAIL_TYPES; hashtype++) {

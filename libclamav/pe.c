@@ -530,29 +530,29 @@ static void cli_parseres_special(uint32_t base, uint32_t rva, fmap_t *map, struc
     fmap_unneed_ptr(map, oentry, entries * 8);
 }
 
-static unsigned int cli_hashsect(fmap_t *map, struct cli_exe_section *s, unsigned char **digest, int *foundhash, int *foundwild)
+static bool cli_hashsect(fmap_t *map, struct cli_exe_section *s, unsigned char **digest, bool *foundhash, bool *foundwild)
 {
     const void *hashme;
 
     if (s->rsz > CLI_MAX_ALLOCATION) {
         cli_dbgmsg("cli_hashsect: skipping hash calculation for too big section\n");
-        return 0;
+        return false;
     }
 
-    if (!s->rsz) return 0;
+    if (!s->rsz) return false;
     if (!(hashme = fmap_need_off_once(map, s->raw, s->rsz))) {
         cli_dbgmsg("cli_hashsect: unable to read section data\n");
-        return 0;
+        return false;
     }
 
     if (foundhash[CLI_HASH_MD5] || foundwild[CLI_HASH_MD5])
         cl_hash_data("md5", hashme, s->rsz, digest[CLI_HASH_MD5], NULL);
     if (foundhash[CLI_HASH_SHA1] || foundwild[CLI_HASH_SHA1])
         cl_sha1(hashme, s->rsz, digest[CLI_HASH_SHA1], NULL);
-    if (foundhash[CLI_HASH_SHA256] || foundwild[CLI_HASH_SHA256])
-        cl_sha256(hashme, s->rsz, digest[CLI_HASH_SHA256], NULL);
+    if (foundhash[CLI_HASH_SHA2_256] || foundwild[CLI_HASH_SHA2_256])
+        cl_sha256(hashme, s->rsz, digest[CLI_HASH_SHA2_256], NULL);
 
-    return 1;
+    return true;
 }
 
 /* check hash section sigs */
@@ -561,8 +561,8 @@ static cl_error_t scan_pe_mdb(cli_ctx *ctx, struct cli_exe_section *exe_section)
     struct cli_matcher *mdb_sect = ctx->engine->hm_mdb;
     unsigned char *hashset[CLI_HASH_AVAIL_TYPES];
     const char *virname = NULL;
-    int foundsize[CLI_HASH_AVAIL_TYPES];
-    int foundwild[CLI_HASH_AVAIL_TYPES];
+    bool foundsize[CLI_HASH_AVAIL_TYPES];
+    bool foundwild[CLI_HASH_AVAIL_TYPES];
     cli_hash_type_t type;
     cl_error_t ret     = CL_CLEAN;
     unsigned char *md5 = NULL;
@@ -2405,7 +2405,7 @@ static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, str
     return CL_SUCCESS;
 }
 
-static cl_error_t hash_imptbl(cli_ctx *ctx, unsigned char **digest, uint32_t *impsz, int *genhash, struct cli_exe_info *peinfo)
+static cl_error_t hash_imptbl(cli_ctx *ctx, unsigned char **digest, uint32_t *impsz, bool *genhash, struct cli_exe_info *peinfo)
 {
     cl_error_t status = CL_ERROR;
     cl_error_t ret;
@@ -2465,9 +2465,9 @@ static cl_error_t hash_imptbl(cli_ctx *ctx, unsigned char **digest, uint32_t *im
             goto done;
         }
     }
-    if (genhash[CLI_HASH_SHA256]) {
-        hashctx[CLI_HASH_SHA256] = cl_hash_init("sha256");
-        if (hashctx[CLI_HASH_SHA256] == NULL) {
+    if (genhash[CLI_HASH_SHA2_256]) {
+        hashctx[CLI_HASH_SHA2_256] = cl_hash_init("sha256");
+        if (hashctx[CLI_HASH_SHA2_256] == NULL) {
             status = CL_EMEM;
             goto done;
         }
@@ -2573,7 +2573,7 @@ static cl_error_t scan_pe_imp(cli_ctx *ctx, struct cli_exe_info *peinfo)
     struct cli_matcher *imp = ctx->engine->hm_imp;
     unsigned char *hashset[CLI_HASH_AVAIL_TYPES];
     const char *virname = NULL;
-    int genhash[CLI_HASH_AVAIL_TYPES];
+    bool genhash[CLI_HASH_AVAIL_TYPES];
     uint32_t impsz = 0;
     cli_hash_type_t type;
     cl_error_t ret = CL_CLEAN;
@@ -2596,7 +2596,7 @@ static cl_error_t scan_pe_imp(cli_ctx *ctx, struct cli_exe_info *peinfo)
 
     /* Force md5 hash generation for debug and preclass */
     if ((cli_debug_flag || ctx->wrkproperty) && !genhash[CLI_HASH_MD5]) {
-        genhash[CLI_HASH_MD5] = 1;
+        genhash[CLI_HASH_MD5] = true;
         hashset[CLI_HASH_MD5] = calloc(hashlen[CLI_HASH_MD5], sizeof(char));
         if (!hashset[CLI_HASH_MD5]) {
             cli_errmsg("scan_pe: calloc failed!\n");
@@ -5525,7 +5525,7 @@ cl_error_t cli_check_auth_header(cli_ctx *ctx, struct cli_exe_info *peinfo)
     // for the 'PE' .cat Authenticode hash file type.
     if (sec_dir_size < 8 &&
         !cli_hm_have_size(ctx->engine->hm_fp, CLI_HASH_SHA1, 2) &&
-        !cli_hm_have_size(ctx->engine->hm_fp, CLI_HASH_SHA256, 2)) {
+        !cli_hm_have_size(ctx->engine->hm_fp, CLI_HASH_SHA2_256, 2)) {
         ret = CL_BREAK;
         goto finish;
     }
@@ -5656,7 +5656,7 @@ cl_error_t cli_check_auth_header(cli_ctx *ctx, struct cli_exe_info *peinfo)
         const char *hashctx_name;
     } supported_hashes[] = {
         {CLI_HASH_SHA1, "sha1"},
-        {CLI_HASH_SHA256, "sha256"},
+        {CLI_HASH_SHA2_256, "sha256"},
     };
 
     for (i = 0; i < (sizeof(supported_hashes) / sizeof(supported_hashes[0])); i++) {
@@ -5744,7 +5744,7 @@ cl_error_t cli_genhash_pe(cli_ctx *ctx, unsigned int class, int type, stats_sect
     struct cli_exe_info *peinfo = &_peinfo;
 
     unsigned char *hash, *hashset[CLI_HASH_AVAIL_TYPES];
-    int genhash[CLI_HASH_AVAIL_TYPES];
+    bool genhash[CLI_HASH_AVAIL_TYPES];
     int hlen = 0;
 
     if (hashes) {
@@ -5785,9 +5785,9 @@ cl_error_t cli_genhash_pe(cli_ctx *ctx, unsigned int class, int type, stats_sect
             hash = hashset[CLI_HASH_SHA1] = calloc(hlen, sizeof(char));
             break;
         default:
-            genhash[CLI_HASH_SHA256] = 1;
-            hlen                     = hashlen[CLI_HASH_SHA256];
-            hash = hashset[CLI_HASH_SHA256] = calloc(hlen, sizeof(char));
+            genhash[CLI_HASH_SHA2_256] = 1;
+            hlen                     = hashlen[CLI_HASH_SHA2_256];
+            hash = hashset[CLI_HASH_SHA2_256] = calloc(hlen, sizeof(char));
             break;
     }
 
@@ -5813,7 +5813,7 @@ cl_error_t cli_genhash_pe(cli_ctx *ctx, unsigned int class, int type, stats_sect
 
         for (i = 0; i < peinfo->nsections; i++) {
             /* Generate hashes */
-            if (cli_hashsect(ctx->fmap, &peinfo->sections[i], hashset, genhash, genhash) == 1) {
+            if (cli_hashsect(ctx->fmap, &peinfo->sections[i], hashset, genhash, genhash)) {
                 if (cli_debug_flag) {
                     dstr = cli_str2hex((char *)hash, hlen);
                     cli_dbgmsg("Section{%u}: %u:%s\n", i, peinfo->sections[i].rsz, dstr ? (char *)dstr : "(NULL)");

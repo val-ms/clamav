@@ -54,7 +54,7 @@ static inline unsigned int getkey(uint8_t *hash, size_t trees)
 
 /* SPLAY --------------------------------------------------------------------- */
 struct node { /* a node */
-    int64_t digest[2];
+    int64_t digest[4];
     struct node *left;
     struct node *right;
     struct node *up;
@@ -201,7 +201,7 @@ static void printnode(const char *prefix, struct cache_set *cs, struct node *n)
         return;
     }
     printf("%s node [%02u]:", prefix, n - cs->data);
-    printf(" size=%lu digest=%llx,%llx\n", (unsigned long)(n->size), n->digest[0], n->digest[1]);
+    printf(" size=%lu digest=%llx,%llx,%llx,%llx\n", (unsigned long)(n->size), n->digest[0], n->digest[1], n->digest[2], n->digest[3]);
     printf("\tleft=");
     if (n->left)
         printf("%02u ", n->left - cs->data);
@@ -265,7 +265,7 @@ static inline void printchain(const char *prefix, struct cache_set *cs)
 #endif
 
 /* Looks up a node and splays it up to the root of the tree */
-static int splay(int64_t *md5, size_t len, struct cache_set *cs)
+static int splay(int64_t *sha256, size_t len, struct cache_set *cs)
 {
     struct node next = {{0, 0}, NULL, NULL, NULL, NULL, NULL, 0, 0}, *right = &next, *left = &next, *temp, *root = cs->root;
     int comp, found = 0;
@@ -274,10 +274,10 @@ static int splay(int64_t *md5, size_t len, struct cache_set *cs)
         return 0;
 
     while (1) {
-        comp = cmp(md5, len, root->digest, root->size);
+        comp = cmp(sha256, len, root->digest, root->size);
         if (comp < 0) {
             if (!root->left) break;
-            if (cmp(md5, len, root->left->digest, root->left->size) < 0) {
+            if (cmp(sha256, len, root->left->digest, root->left->size) < 0) {
                 temp       = root->left;
                 root->left = temp->right;
                 if (temp->right) temp->right->up = root;
@@ -292,7 +292,7 @@ static int splay(int64_t *md5, size_t len, struct cache_set *cs)
             root        = root->left;
         } else if (comp > 0) {
             if (!root->right) break;
-            if (cmp(md5, len, root->right->digest, root->right->size) > 0) {
+            if (cmp(sha256, len, root->right->digest, root->right->size) > 0) {
                 temp        = root->right;
                 root->right = temp->left;
                 if (temp->left) temp->left->up = root;
@@ -325,11 +325,11 @@ static int splay(int64_t *md5, size_t len, struct cache_set *cs)
 }
 
 /* Looks up an hash in the tree and maintains the replacement chain */
-static inline int cacheset_lookup(struct cache_set *cs, unsigned char *md5, size_t size, uint32_t recursion_level)
+static inline int cacheset_lookup(struct cache_set *cs, unsigned char *sha256, size_t size, uint32_t recursion_level)
 {
-    int64_t hash[2];
+    int64_t hash[4];
 
-    memcpy(hash, md5, 16);
+    memcpy(hash, sha256, 32);
     if (splay(hash, size, cs)) {
         struct node *o = cs->root->prev, *p = cs->root, *q = cs->root->next;
 #ifdef PRINT_CHAINS
@@ -367,12 +367,12 @@ static inline int cacheset_lookup(struct cache_set *cs, unsigned char *md5, size
 /* If the hash is present nothing happens.
    Otherwise a new node is created for the hash picking one from the begin of the chain.
    Used nodes are moved to the end of the chain */
-static inline const char *cacheset_add(struct cache_set *cs, unsigned char *md5, size_t size, uint32_t recursion_level)
+static inline const char *cacheset_add(struct cache_set *cs, unsigned char *sha256, size_t size, uint32_t recursion_level)
 {
     struct node *newnode;
-    int64_t hash[2];
+    int64_t hash[4];
 
-    memcpy(hash, md5, 16);
+    memcpy(hash, sha256, 32);
     if (splay(hash, size, cs)) {
         if (cs->root->minrec > recursion_level)
             cs->root->minrec = recursion_level;
@@ -457,13 +457,13 @@ static inline const char *cacheset_add(struct cache_set *cs, unsigned char *md5,
 /* If the hash is not present nothing happens other than splaying the tree.
    Otherwise the identified node is removed from the tree and then placed back at
    the front of the chain. */
-static inline void cacheset_remove(struct cache_set *cs, unsigned char *md5, size_t size)
+static inline void cacheset_remove(struct cache_set *cs, unsigned char *sha256, size_t size)
 {
     struct node *targetnode;
     struct node *reattachnode;
-    int64_t hash[2];
+    int64_t hash[4];
 
-    memcpy(hash, md5, 16);
+    memcpy(hash, sha256, 32);
     if (splay(hash, size, cs) != 1) {
         cli_dbgmsg("cacheset_remove: node not found in tree\n");
         return; /* No op */
@@ -498,6 +498,8 @@ static inline void cacheset_remove(struct cache_set *cs, unsigned char *md5, siz
     targetnode->size      = (size_t)0;
     targetnode->digest[0] = 0;
     targetnode->digest[1] = 0;
+    targetnode->digest[2] = 0;
+    targetnode->digest[3] = 0;
     targetnode->up        = NULL;
     targetnode->left      = NULL;
     targetnode->right     = NULL;
@@ -527,18 +529,18 @@ static inline void cacheset_remove(struct cache_set *cs, unsigned char *md5, siz
 }
 
 /* Looks up an hash in the proper tree */
-static int cache_lookup_hash(unsigned char *md5, size_t len, struct CACHE *cache, uint32_t recursion_level)
+static int cache_lookup_hash(unsigned char *sha256, size_t len, struct CACHE *cache, uint32_t recursion_level)
 {
     unsigned int key = 0;
     int ret          = CL_VIRUS;
     struct CACHE *c;
 
-    if (!md5) {
+    if (!sha256) {
         cli_dbgmsg("cache_lookup: No hash available. Nothing to look up.\n");
         return ret;
     }
 
-    key = getkey(md5, cache->trees);
+    key = getkey(sha256, cache->trees);
 
     c = &cache[key];
 
@@ -549,7 +551,7 @@ static int cache_lookup_hash(unsigned char *md5, size_t len, struct CACHE *cache
     }
 #endif
 
-    ret = (cacheset_lookup(&c->cacheset, md5, len, recursion_level)) ? CL_CLEAN : CL_VIRUS;
+    ret = (cacheset_lookup(&c->cacheset, sha256, len, recursion_level)) ? CL_CLEAN : CL_VIRUS;
 
 #ifdef CL_THREAD_SAFE
     pthread_mutex_unlock(&c->mutex);
@@ -634,7 +636,7 @@ void clean_cache_destroy(struct cl_engine *engine)
     MPOOL_FREE(engine->mempool, cache);
 }
 
-void clean_cache_add(unsigned char *md5, size_t size, cli_ctx *ctx)
+void clean_cache_add(unsigned char *sha256, size_t size, cli_ctx *ctx)
 {
     const char *errmsg = NULL;
 
@@ -650,7 +652,7 @@ void clean_cache_add(unsigned char *md5, size_t size, cli_ctx *ctx)
         return;
     }
 
-    if (!md5) {
+    if (!sha256) {
         cli_dbgmsg("clean_cache_add: No hash available. Nothing to add to cache.\n");
         return;
     }
@@ -677,7 +679,7 @@ void clean_cache_add(unsigned char *md5, size_t size, cli_ctx *ctx)
 
     level = (ctx->fmap && ctx->fmap->dont_cache_flag) ? ctx->recursion_level : 0;
 
-    key = getkey(md5, ctx->engine->cache->trees);
+    key = getkey(sha256, ctx->engine->cache->trees);
     c   = &ctx->engine->cache[key];
 
 #ifdef CL_THREAD_SAFE
@@ -687,7 +689,7 @@ void clean_cache_add(unsigned char *md5, size_t size, cli_ctx *ctx)
     }
 #endif
 
-    errmsg = cacheset_add(&c->cacheset, md5, size, level);
+    errmsg = cacheset_add(&c->cacheset, sha256, size, level);
 
 #ifdef CL_THREAD_SAFE
     pthread_mutex_unlock(&c->mutex);
@@ -696,12 +698,18 @@ void clean_cache_add(unsigned char *md5, size_t size, cli_ctx *ctx)
         cli_errmsg("%s\n", errmsg);
     }
 
-    cli_dbgmsg("clean_cache_add: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x (level %u)\n", md5[0], md5[1], md5[2], md5[3], md5[4], md5[5], md5[6], md5[7], md5[8], md5[9], md5[10], md5[11], md5[12], md5[13], md5[14], md5[15], level);
+    cli_dbgmsg("clean_cache_add: "
+        "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x (level %u)\n",
+        sha256[0], sha256[1], sha256[2], sha256[3], sha256[4], sha256[5], sha256[6], sha256[7],
+        sha256[8], sha256[9], sha256[10], sha256[11], sha256[12], sha256[13], sha256[14], sha256[15],
+        sha256[16], sha256[17], sha256[18], sha256[19], sha256[20], sha256[21], sha256[22], sha256[23],
+        sha256[24], sha256[25], sha256[26], sha256[27], sha256[28], sha256[29], sha256[30], sha256[31],
+        level);
 
     return;
 }
 
-void clean_cache_remove(unsigned char *md5, size_t size, const struct cl_engine *engine)
+void clean_cache_remove(unsigned char *sha256, size_t size, const struct cl_engine *engine)
 {
     unsigned int key = 0;
     struct CACHE *c;
@@ -714,12 +722,12 @@ void clean_cache_remove(unsigned char *md5, size_t size, const struct cl_engine 
         return;
     }
 
-    if (!md5) {
+    if (!sha256) {
         cli_dbgmsg("clean_cache_remove: No hash available. Nothing to remove from cache.\n");
         return;
     }
 
-    key = getkey(md5, engine->cache->trees);
+    key = getkey(sha256, engine->cache->trees);
 
     c = &engine->cache[key];
 #ifdef CL_THREAD_SAFE
@@ -729,16 +737,21 @@ void clean_cache_remove(unsigned char *md5, size_t size, const struct cl_engine 
     }
 #endif
 
-    cacheset_remove(&c->cacheset, md5, size);
+    cacheset_remove(&c->cacheset, sha256, size);
 
 #ifdef CL_THREAD_SAFE
     pthread_mutex_unlock(&c->mutex);
 #endif
-    cli_dbgmsg("clean_cache_remove: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n", md5[0], md5[1], md5[2], md5[3], md5[4], md5[5], md5[6], md5[7], md5[8], md5[9], md5[10], md5[11], md5[12], md5[13], md5[14], md5[15]);
+    cli_dbgmsg("clean_cache_remove: "
+        "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+        sha256[0], sha256[1], sha256[2], sha256[3], sha256[4], sha256[5], sha256[6], sha256[7],
+        sha256[8], sha256[9], sha256[10], sha256[11], sha256[12], sha256[13], sha256[14], sha256[15],
+        sha256[16], sha256[17], sha256[18], sha256[19], sha256[20], sha256[21], sha256[22], sha256[23],
+        sha256[24], sha256[25], sha256[26], sha256[27], sha256[28], sha256[29], sha256[30], sha256[31]);
     return;
 }
 
-cl_error_t clean_cache_check(unsigned char *md5, size_t size, cli_ctx *ctx)
+cl_error_t clean_cache_check(unsigned char *sha256, size_t size, cli_ctx *ctx)
 {
     int ret;
 
@@ -752,7 +765,13 @@ cl_error_t clean_cache_check(unsigned char *md5, size_t size, cli_ctx *ctx)
         return CL_VIRUS;
     }
 
-    ret = cache_lookup_hash(md5, size, ctx->engine->cache, ctx->recursion_level);
-    cli_dbgmsg("clean_cache_check: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x is %s\n", md5[0], md5[1], md5[2], md5[3], md5[4], md5[5], md5[6], md5[7], md5[8], md5[9], md5[10], md5[11], md5[12], md5[13], md5[14], md5[15], (ret == CL_VIRUS) ? "negative" : "positive");
+    ret = cache_lookup_hash(sha256, size, ctx->engine->cache, ctx->recursion_level);
+    cli_dbgmsg("clean_cache_check: "
+        "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x is %s\n",
+        sha256[0], sha256[1], sha256[2], sha256[3], sha256[4], sha256[5], sha256[6], sha256[7],
+        sha256[8], sha256[9], sha256[10], sha256[11], sha256[12], sha256[13], sha256[14], sha256[15],
+        sha256[16], sha256[17], sha256[18], sha256[19], sha256[20], sha256[21], sha256[22], sha256[23],
+        sha256[24], sha256[25], sha256[26], sha256[27], sha256[28], sha256[29], sha256[30], sha256[31],
+        (ret == CL_VIRUS) ? "negative" : "positive");
     return ret;
 }

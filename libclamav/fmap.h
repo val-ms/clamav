@@ -85,11 +85,11 @@ struct cl_fmap {
     void *windows_file_handle;
     void *windows_map_handle;
     bool have_md5;
-    unsigned char md5[CLI_HASHLEN_MD5];
+    unsigned char md5[MD5_HASH_SIZE];
     bool have_sha1;
-    unsigned char sha1[CLI_HASHLEN_SHA1];
+    unsigned char sha1[SHA1_HASH_SIZE];
     bool have_sha256;
-    unsigned char sha256[CLI_HASHLEN_SHA256];
+    unsigned char sha256[SHA256_HASH_SIZE];
     uint64_t *bitmap;
     char *name;
 };

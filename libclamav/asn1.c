@@ -2293,7 +2293,7 @@ int asn1_load_mscat(fmap_t *map, struct cl_engine *engine)
             if (CLI_SHA1RSA == hashtype) {
                 hm_hashtype = CLI_HASH_SHA1;
             } else if (CLI_SHA256RSA == hashtype) {
-                hm_hashtype = CLI_HASH_SHA256;
+                hm_hashtype = CLI_HASH_SHA2_256;
             } else {
                 cli_dbgmsg("asn1_load_mscat: only SHA1 and SHA256 hashes are supported for .cat file sigs\n");
                 return 1;
@@ -2333,7 +2333,7 @@ int asn1_load_mscat(fmap_t *map, struct cl_engine *engine)
             /* Load the trusted hashes into hm_fp, using the size values
              * 1 and 2 as sentinel values corresponding to CAB and PE hashes
              * from .cat files respectively. */
-            if (hm_addhash_bin(engine->hm_fp, tagval3.content, hm_hashtype, hashed_obj_type, NULL)) {
+            if (CL_SUCCESS != hm_addhash_bin(engine->hm_fp, tagval3.content, hm_hashtype, hashed_obj_type, NULL)) {
                 cli_warnmsg("asn1_load_mscat: failed to add hash\n");
                 return 1;
             }

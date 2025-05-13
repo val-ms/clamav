@@ -1103,15 +1103,15 @@ cl_error_t fmap_set_hash(fmap_t *map, unsigned char *hash, cli_hash_type_t type)
 
     switch (type) {
         case CLI_HASH_MD5:
-            memcpy(map->md5, hash, CLI_HASHLEN_MD5);
+            memcpy(map->md5, hash, MD5_HASH_SIZE);
             map->have_md5 = true;
             break;
         case CLI_HASH_SHA1:
-            memcpy(map->sha1, hash, CLI_HASHLEN_SHA1);
+            memcpy(map->sha1, hash, SHA1_HASH_SIZE);
             map->have_sha1 = true;
             break;
-        case CLI_HASH_SHA256:
-            memcpy(map->sha256, hash, CLI_HASHLEN_SHA256);
+        case CLI_HASH_SHA2_256:
+            memcpy(map->sha256, hash, SHA256_HASH_SIZE);
             map->have_sha256 = true;
             break;
         default:
@@ -1143,7 +1143,7 @@ cl_error_t fmap_get_hash(fmap_t *map, unsigned char **hash, cli_hash_type_t type
                 goto complete;
             }
             break;
-        case CLI_HASH_SHA256:
+        case CLI_HASH_SHA2_256:
             if (map->have_sha256) {
                 goto complete;
             }
@@ -1165,7 +1165,7 @@ cl_error_t fmap_get_hash(fmap_t *map, unsigned char **hash, cli_hash_type_t type
         case CLI_HASH_SHA1:
             hashctx = cl_hash_init("sha1");
             break;
-        case CLI_HASH_SHA256:
+        case CLI_HASH_SHA2_256:
             hashctx = cl_hash_init("sha256");
             break;
         default:
@@ -1207,7 +1207,7 @@ cl_error_t fmap_get_hash(fmap_t *map, unsigned char **hash, cli_hash_type_t type
             cl_finish_hash(hashctx, map->sha1);
             map->have_sha1 = true;
             break;
-        case CLI_HASH_SHA256:
+        case CLI_HASH_SHA2_256:
             cl_finish_hash(hashctx, map->sha256);
             map->have_sha256 = true;
             break;
@@ -1227,7 +1227,7 @@ complete:
         case CLI_HASH_SHA1:
             *hash = map->sha1;
             break;
-        case CLI_HASH_SHA256:
+        case CLI_HASH_SHA2_256:
             *hash = map->sha256;
             break;
         default:

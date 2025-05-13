@@ -28,20 +28,20 @@
 /**
  * @brief Add a hash to the cache of clean files.
  *
- * @param md5   The file to add.
- * @param size  The size of the file.
- * @param ctx   The scanning context.
+ * @param sha256 The file to add.
+ * @param size   The size of the file.
+ * @param ctx    The scanning context.
  */
-void clean_cache_add(unsigned char *md5, size_t size, cli_ctx *ctx);
+void clean_cache_add(unsigned char *sha256, size_t size, cli_ctx *ctx);
 
 /**
  * @brief Removes a hash from the clean cache
  *
- * @param md5   The file to remove.
- * @param size  The size of the file.
- * @param ctx   The scanning context.
+ * @param sha256 The file to remove.
+ * @param size   The size of the file.
+ * @param ctx    The scanning context.
  */
-void clean_cache_remove(unsigned char *md5, size_t size, const struct cl_engine *engine);
+void clean_cache_remove(unsigned char *sha256, size_t size, const struct cl_engine *engine);
 
 /**
  * @brief Hashes a file onto the provided buffer and looks it up the clean cache.
@@ -51,7 +51,7 @@ void clean_cache_remove(unsigned char *md5, size_t size, const struct cl_engine 
  * @return CL_VIRUS if found, CL_CLEAN if not FIXME or a recoverable error.
    @return CL_EREAD if unrecoverable.
  */
-cl_error_t clean_cache_check(unsigned char *md5, size_t size, cli_ctx *ctx);
+cl_error_t clean_cache_check(unsigned char *sha256, size_t size, cli_ctx *ctx);
 
 /**
  * @brief Allocates the trees for the clean cache.

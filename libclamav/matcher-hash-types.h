@@ -25,15 +25,12 @@
 typedef enum cli_hash_type {
     CLI_HASH_MD5 = 0,
     CLI_HASH_SHA1,
-    CLI_HASH_SHA256,
+    CLI_HASH_SHA2_256,
 
     /* new hash types go above this line */
     CLI_HASH_AVAIL_TYPES
 } cli_hash_type_t;
 
-#define CLI_HASHLEN_MD5 16
-#define CLI_HASHLEN_SHA1 20
-#define CLI_HASHLEN_SHA256 32
-#define CLI_HASHLEN_MAX 32
+#define CLI_HASHLEN_MAX SHA256_HASH_SIZE
 
 #endif

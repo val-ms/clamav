@@ -252,7 +252,7 @@ const struct clam_option __clam_options[] = {
     {NULL, "tar", 0, CLOPT_TYPE_STRING, NULL, -1, "foo", 0, OPT_CLAMSCAN | OPT_DEPRECATED, "", ""},
     {NULL, "tgz", 0, CLOPT_TYPE_STRING, NULL, -1, "foo", 0, OPT_CLAMSCAN | OPT_DEPRECATED, "", ""},
     {NULL, "deb", 0, CLOPT_TYPE_STRING, NULL, -1, "foo", 0, OPT_CLAMSCAN | OPT_DEPRECATED, "", ""},
-    {NULL, "sha256", 0, CLOPT_TYPE_BOOL, MATCH_BOOL, 0, NULL, 0, OPT_SIGTOOL | OPT_DEPRECATED , "", ""},
+    {NULL, "sha256", 0, CLOPT_TYPE_BOOL, MATCH_BOOL, 0, NULL, 0, OPT_SIGTOOL | OPT_DEPRECATED, "", ""},
 
 #ifdef _WIN32
     {NULL, "memory", 0, CLOPT_TYPE_BOOL, MATCH_BOOL, 0, NULL, 0, OPT_CLAMSCAN | OPT_CLAMDSCAN, "", ""},

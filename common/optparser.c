@@ -60,7 +60,7 @@
 #define CLAMKEY "Software\\ClamAV"
 #endif
 
-#define MAXCMDOPTS 150
+#define MAXCMDOPTS 200
 #define MAX_OPTION_LINE_LENGTH 1024
 
 #define MATCH_NUMBER "^[0-9]+((( +)?#(.*))?)$"

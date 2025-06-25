@@ -759,8 +759,8 @@ int main(int argc, char **argv)
     }
 
     /* Calculate size of scanned data */
-    mb = size * (CL_COUNT_PRECISION / 1024) / 1024.0;
-    printf("Data scanned: %2.2Lf MB\n", mb);
+    mb = size / 1024 / 1024.0;
+    printf("Data scanned: %2.4Lf MB\n", mb);
 
     status = ret == CL_VIRUS ? 1 : 0;
 

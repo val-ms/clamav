@@ -60,10 +60,29 @@ struct s_info info;
 short recursion = 0, bell = 0;
 short printinfected = 0, printclean = 1;
 
+static void loggBytes(uint64_t bytes, int bPad)
+{
+    if (bytes >= (1024 * 1024 * 1024)) {
+        const char *format = bPad ? "%.02f GiB" : "%.02f GiB";
+        double gigabytes    = bytes / (double)(1024 * 1024 * 1024);
+        logg(LOGG_INFO, format, gigabytes);
+    } else if (bytes >= (1024 * 1024)) {
+        const char *format = bPad ? "%.02f MiB" : "%.02f MiB";
+        double megabytes   = bytes / (double)(1024 * 1024);
+        logg(LOGG_INFO, format, megabytes);
+    } else if (bytes >= 1024) {
+        const char *format = bPad ? "%.02f KiB" : "%.02f KiB";
+        double kilobytes   = bytes / (double)(1024);
+        logg(LOGG_INFO, format, kilobytes);
+    } else {
+        const char *format = bPad ? "%" PRIu64 " B" : "%" PRIu64 " B";
+        logg(LOGG_INFO, format, bytes);
+    }
+}
+
 int main(int argc, char **argv)
 {
     int ds, dms, ret;
-    double mb, rmb;
     struct timeval t1, t2;
     time_t date_start, date_end;
 
@@ -193,10 +212,15 @@ int main(int argc, char **argv)
         if (notmoved) {
             logg(LOGG_INFO, "Not %s: %u\n", optget(opts, "copy")->enabled ? "moved" : "copied", notmoved);
         }
-        mb = info.blocks * (CL_COUNT_PRECISION / 1024) / 1024.0;
-        logg(LOGG_INFO, "Data scanned: %2.2lf MB\n", mb);
-        rmb = info.rblocks * (CL_COUNT_PRECISION / 1024) / 1024.0;
-        logg(LOGG_INFO, "Data read: %2.2lf MB (ratio %.2f:1)\n", rmb, info.rblocks ? (double)info.blocks / (double)info.rblocks : 0);
+
+        logg(LOGG_INFO, "Data scanned: ");
+        loggBytes(info.bytes_scanned, 1);
+        logg(LOGG_INFO, "\n");
+
+        logg(LOGG_INFO, "Data read: ");
+        loggBytes(info.bytes_read, 1);
+        logg(LOGG_INFO, " (ratio %.2f:1)\n", info.bytes_read ? (double)info.bytes_scanned / (double)info.bytes_read : 0);
+
         logg(LOGG_INFO, "Time: %u.%3.3u sec (%u m %u s)\n", ds, dms / 1000, ds / 60, ds % 60);
 
 #ifdef _WIN32

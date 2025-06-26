@@ -192,8 +192,9 @@ cl_error_t cli_scanishield_msi(cli_ctx *ctx, off_t off)
 {
     cl_error_t ret;
     const uint8_t *buf;
-    unsigned int fcount, scanned = 0;
-    fmap_t *map = ctx->fmap;
+    uint32_t fcount;
+    uint32_t scanned_files = 0;
+    fmap_t *map    = ctx->fmap;
 
     cli_dbgmsg("in ishield-msi\n");
     if (!(buf = fmap_need_off_once(map, off, 0x20))) {
@@ -344,8 +345,8 @@ cl_error_t cli_scanishield_msi(cli_ctx *ctx, off_t off)
             return ret;
         }
 
-        scanned++;
-        if (ctx->engine->maxfiles && scanned >= ctx->engine->maxfiles) {
+        scanned_files++;
+        if (ctx->engine->maxfiles && scanned_files >= ctx->engine->maxfiles) {
             cli_dbgmsg("ishield-msi: File limit reached (max: %u)\n", ctx->engine->maxfiles);
             return CL_EMAXFILES;
         }
@@ -541,7 +542,9 @@ static cl_error_t is_dump_and_scan(cli_ctx *ctx, off_t off, size_t fsize)
 static cl_error_t is_parse_hdr(cli_ctx *ctx, struct IS_CABSTUFF *c)
 {
     uint32_t h1_data_off, objs_files_cnt, objs_dirs_off;
-    unsigned int off, i, scanned = 0;
+    uint32_t off;
+    uint32_t i;
+    uint32_t scanned_files = 0;
     int ret = CL_BREAK;
     char hash[33], *hdr;
     fmap_t *map = ctx->fmap;
@@ -668,8 +671,8 @@ static cl_error_t is_parse_hdr(cli_ctx *ctx, struct IS_CABSTUFF *c)
                             }
                             if (j != c->cabcnt) {
                                 if (CLI_ISCONTAINED(c->cabs[j].off, c->cabs[j].sz, file_stream_off + c->cabs[j].off, file_csize)) {
-                                    scanned++;
-                                    if (ctx->engine->maxfiles && scanned >= ctx->engine->maxfiles) {
+                                    scanned_files++;
+                                    if (ctx->engine->maxfiles && scanned_files >= ctx->engine->maxfiles) {
                                         cli_dbgmsg("is_parse_hdr: File limit reached (max: %u)\n", ctx->engine->maxfiles);
                                         if (file_name != emptyname)
                                             fmap_unneed_ptr(map, (void *)file_name, strlen(file_name) + 1);

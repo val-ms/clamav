@@ -30,7 +30,7 @@
 #include "execs.h"
 
 struct cli_target_info {
-    off_t fsize;
+    size_t fsize;
     struct cli_exe_info exeinfo;
     int status; /* 0 == not initialised, 1 == initialised OK, -1 == error */
 };
@@ -185,18 +185,18 @@ struct cli_matcher {
 };
 
 struct cli_cdb {
-    char *virname;           /* virus name */
-    cli_file_t ctype;        /* container type */
-    regex_t name;            /* filename regex */
-    size_t csize[2];         /* container size (min, max); if csize[0] != csize[1]
-                              * then value of 0 makes the field ignored
-                              */
-    size_t fsizec[2];        /* file size in container */
-    size_t fsizer[2];        /* real file size */
-    int encrypted;           /* file is encrypted; 2 == ignore */
-    unsigned int filepos[2]; /* file position in container */
-    int res1;                /* reserved / format specific */
-    void *res2;              /* reserved / format specific */
+    char *virname;     /* virus name */
+    cli_file_t ctype;  /* container type */
+    regex_t name;      /* filename regex */
+    size_t csize[2];   /* container size (min, max); if csize[0] != csize[1]
+                        * then value of 0 makes the field ignored
+                        */
+    size_t fsizec[2];  /* file size in container */
+    size_t fsizer[2];  /* real file size */
+    int encrypted;     /* file is encrypted; 2 == ignore */
+    size_t filepos[2]; /* file position in container */
+    int res1;          /* reserved / format specific */
+    void *res2;        /* reserved / format specific */
 
     struct cli_cdb *next;
 };
@@ -250,8 +250,8 @@ static const struct cli_mtarget cli_mtargets[CLI_MTARGETS] = {
 
 // clang-format off
 
-#define CLI_OFF_ANY         0xffffffff
-#define CLI_OFF_NONE        0xfffffffe
+#define CLI_OFF_ANY         SIZE_MAX
+#define CLI_OFF_NONE        (SIZE_MAX - 1)
 #define CLI_OFF_ABSOLUTE    1
 #define CLI_OFF_EOF_MINUS   2
 #define CLI_OFF_EP_PLUS     3
@@ -360,7 +360,7 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
  */
 cl_error_t cli_exp_eval(cli_ctx *ctx, struct cli_matcher *root, struct cli_ac_data *acdata, struct cli_target_info *target_info);
 
-cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, unsigned int target, uint32_t *offdata, uint32_t *offset_min, uint32_t *offset_max);
+cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, unsigned int target, size_t *offdata, size_t *offset_min, size_t *offset_max);
 
 /**
  * @brief Determine if an alert is a known false positive, using each fmap in the ctx->container stack to check MD5, SHA1, and SHA2-256 hashes.
@@ -372,7 +372,7 @@ cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, un
  */
 cl_error_t cli_check_fp(cli_ctx *ctx, const char *vname);
 
-cl_error_t cli_matchmeta(cli_ctx *ctx, const char *fname, size_t fsizec, size_t fsizer, int encrypted, unsigned int filepos, int res1);
+cl_error_t cli_matchmeta(cli_ctx *ctx, const char *fname, size_t fsizec, size_t fsizer, int encrypted, size_t filepos, int res1);
 
 /** Parse the executable headers and, if successful, populate exeinfo
  *

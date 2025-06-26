@@ -3995,13 +3995,13 @@ int cli_scanpe(cli_ctx *ctx)
         CLI_UNPSIZELIMITS("cli_scanpe: PEspin", fsize);
 
         if ((spinned = (char *)cli_max_malloc(fsize)) == NULL) {
-            cli_errmsg("cli_scanpe: PESping: Unable to allocate memory for spinned %lu\n", (unsigned long)fsize);
+            cli_errmsg("cli_scanpe: PESping: Unable to allocate memory for spinned %zu\n", fsize);
             cli_exe_info_destroy(peinfo);
             return CL_EMEM;
         }
 
         if (fmap_readn(map, spinned, 0, fsize) != fsize) {
-            cli_dbgmsg("cli_scanpe: PESpin: Can't read %lu bytes\n", (unsigned long)fsize);
+            cli_dbgmsg("cli_scanpe: PESpin: Can't read %zu bytes\n", fsize);
             free(spinned);
             cli_exe_info_destroy(peinfo);
             return CL_EREAD;
@@ -4062,13 +4062,13 @@ int cli_scanpe(cli_ctx *ctx)
             char *spinned;
 
             if ((spinned = (char *)cli_max_malloc(fsize)) == NULL) {
-                cli_errmsg("cli_scanpe: yC: Unable to allocate memory for spinned %lu\n", (unsigned long)fsize);
+                cli_errmsg("cli_scanpe: yC: Unable to allocate memory for spinned %zu\n", fsize);
                 cli_exe_info_destroy(peinfo);
                 return CL_EMEM;
             }
 
             if (fmap_readn(map, spinned, 0, fsize) != fsize) {
-                cli_dbgmsg("cli_scanpe: yC: Can't read %lu bytes\n", (unsigned long)fsize);
+                cli_dbgmsg("cli_scanpe: yC: Can't read %zu bytes\n", fsize);
                 free(spinned);
                 cli_exe_info_destroy(peinfo);
                 return CL_EREAD;
@@ -5048,7 +5048,7 @@ cl_error_t cli_peheader(fmap_t *map, struct cli_exe_info *peinfo, uint32_t opts,
          * section from the list or zero out its size. */
         if (section->rsz) { /* Don't bother with virtual only sections */
             if (section->raw >= fsize || section->uraw >= fsize) {
-                cli_dbgmsg("cli_peheader: Broken PE file - Section %zu starts or exists beyond the end of file (Offset@ %lu, Total filesize %lu)\n", section_pe_idx, (unsigned long)section->raw, (unsigned long)fsize);
+                cli_dbgmsg("cli_peheader: Broken PE file - Section %zu starts or exists beyond the end of file (Offset@ " STDu32 ", Total filesize %zu)\n", section_pe_idx, section->raw, fsize);
 
                 if (opts & CLI_PEHEADER_OPT_REMOVE_MISSING_SECTIONS) {
                     if (peinfo->nsections == 1) {

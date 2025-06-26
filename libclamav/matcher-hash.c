@@ -84,7 +84,7 @@ cl_error_t cli_hash_type_from_name(const char* name, cli_hash_type_t *type_out){
     return CL_SUCCESS;
 }
 
-cl_error_t hm_addhash_str(struct cli_matcher *root, const char *strhash, uint32_t size, const char *virusname)
+cl_error_t hm_addhash_str(struct cli_matcher *root, const char *strhash, size_t size, const char *virusname)
 {
     cli_hash_type_t type;
     char binhash[SHA256_HASH_SIZE];
@@ -96,8 +96,8 @@ cl_error_t hm_addhash_str(struct cli_matcher *root, const char *strhash, uint32_
     }
 
     /* size 0 here is now a wildcard size match */
-    if (size == (uint32_t)-1) {
-        cli_errmsg("hm_addhash_str: null or invalid size (%u)\n", size);
+    if (size == SIZE_MAX) {
+        cli_errmsg("hm_addhash_str: null or invalid size (%zu)\n", size);
         return CL_EARG;
     }
 
@@ -124,28 +124,28 @@ cl_error_t hm_addhash_str(struct cli_matcher *root, const char *strhash, uint32_
     return hm_addhash_bin(root, binhash, type, size, virusname);
 }
 
-cl_error_t hm_addhash_bin(struct cli_matcher *root, const void *binhash, cli_hash_type_t type, uint32_t size, const char *virusname)
+cl_error_t hm_addhash_bin(struct cli_matcher *root, const void *binhash, cli_hash_type_t type, size_t size, const char *virusname)
 {
-    const unsigned int hlen = cli_hash_len(type);
-    const struct cli_htu32_element *item;
+    const size_t hlen = cli_hash_len(type);
+    const struct cli_ht_size_t_element *item;
     struct cli_sz_hash *szh;
-    struct cli_htu32 *ht;
+    struct cli_ht_size_t *ht;
     int i;
 
     if (size) {
         /* size non-zero, find sz_hash element in size-driven hashtable  */
         ht = &root->hm.sizehashes[type];
         if (!root->hm.sizehashes[type].capacity) {
-            i = CLI_HTU32_INIT(ht, 64, root->mempool);
+            i = CLI_HT_SIZE_T_INIT(ht, 64, root->mempool);
             if (i) {
                 cli_errmsg("hm_addhash_bin: failed to initialize hash table\n");
                 return CL_ERROR;
             }
         }
 
-        item = cli_htu32_find(ht, size);
+        item = cli_ht_size_t_find(ht, size);
         if (!item) {
-            struct cli_htu32_element htitem;
+            struct cli_ht_size_t_element htitem;
             szh = MPOOL_CALLOC(root->mempool, 1, sizeof(*szh));
             if (!szh) {
                 cli_errmsg("hm_addhash_bin: failed to allocate size hash\n");
@@ -154,7 +154,7 @@ cl_error_t hm_addhash_bin(struct cli_matcher *root, const void *binhash, cli_has
 
             htitem.key         = size;
             htitem.data.as_ptr = szh;
-            i                  = CLI_HTU32_INSERT(ht, &htitem, root->mempool);
+            i                  = CLI_HT_SIZE_T_INSERT(ht, &htitem, root->mempool);
             if (i) {
                 cli_errmsg("hm_addhash_bin: failed to add item to hashtab");
                 MPOOL_FREE(root->mempool, szh);
@@ -193,7 +193,7 @@ cl_error_t hm_addhash_bin(struct cli_matcher *root, const void *binhash, cli_has
     return CL_SUCCESS;
 }
 
-static inline int hm_cmp(const uint8_t *itm, const uint8_t *ref, unsigned int keylen)
+static inline int hm_cmp(const uint8_t *itm, const uint8_t *ref, size_t keylen)
 {
 #if WORDS_BIGENDIAN == 0
     uint32_t i = *(uint32_t *)itm, r = *(uint32_t *)ref;
@@ -205,7 +205,7 @@ static inline int hm_cmp(const uint8_t *itm, const uint8_t *ref, unsigned int ke
 #endif
 }
 
-static void hm_sort(struct cli_sz_hash *szh, size_t l, size_t r, unsigned int keylen)
+static void hm_sort(struct cli_sz_hash *szh, size_t l, size_t r, size_t keylen)
 {
     uint8_t piv[CLI_HASHLEN_MAX], tmph[CLI_HASHLEN_MAX];
     size_t l1, r1;
@@ -250,21 +250,21 @@ static void hm_sort(struct cli_sz_hash *szh, size_t l, size_t r, unsigned int ke
 void hm_flush(struct cli_matcher *root)
 {
     cli_hash_type_t type;
-    unsigned int keylen;
+    size_t keylen;
     struct cli_sz_hash *szh;
 
     if (!root)
         return;
 
     for (type = CLI_HASH_MD5; type < CLI_HASH_AVAIL_TYPES; type++) {
-        struct cli_htu32 *ht                 = &root->hm.sizehashes[type];
-        const struct cli_htu32_element *item = NULL;
+        struct cli_ht_size_t *ht                 = &root->hm.sizehashes[type];
+        const struct cli_ht_size_t_element *item = NULL;
         szh                                  = NULL;
 
         if (!root->hm.sizehashes[type].capacity)
             continue;
 
-        while ((item = cli_htu32_next(ht, item))) {
+        while ((item = cli_ht_size_t_next(ht, item))) {
             szh    = (struct cli_sz_hash *)item->data.as_ptr;
             keylen = cli_hash_len(type);
 
@@ -282,9 +282,9 @@ void hm_flush(struct cli_matcher *root)
     }
 }
 
-bool cli_hm_have_size(const struct cli_matcher *root, cli_hash_type_t type, uint32_t size)
+bool cli_hm_have_size(const struct cli_matcher *root, cli_hash_type_t type, size_t size)
 {
-    return (size && size != 0xffffffff && root && root->hm.sizehashes[type].capacity && cli_htu32_find(&root->hm.sizehashes[type], size));
+    return (size && size != SIZE_MAX && root && root->hm.sizehashes[type].capacity && cli_ht_size_t_find(&root->hm.sizehashes[type], size));
 }
 
 bool cli_hm_have_wild(const struct cli_matcher *root, cli_hash_type_t type)
@@ -299,7 +299,7 @@ bool cli_hm_have_any(const struct cli_matcher *root, cli_hash_type_t type)
 
 static cl_error_t hm_scan(const uint8_t *digest, const char **virname, const struct cli_sz_hash *szh, cli_hash_type_t type)
 {
-    unsigned int keylen;
+    size_t keylen;
     size_t l, r;
 
     if (!digest || !szh || !szh->items)
@@ -329,15 +329,15 @@ static cl_error_t hm_scan(const uint8_t *digest, const char **virname, const str
 }
 
 /* cli_hm_scan will scan only size-specific hashes, if any */
-cl_error_t cli_hm_scan(const uint8_t *digest, uint32_t size, const char **virname, const struct cli_matcher *root, cli_hash_type_t type)
+cl_error_t cli_hm_scan(const uint8_t *digest, size_t size, const char **virname, const struct cli_matcher *root, cli_hash_type_t type)
 {
-    const struct cli_htu32_element *item;
+    const struct cli_ht_size_t_element *item;
     struct cli_sz_hash *szh;
 
-    if (!digest || !size || size == 0xffffffff || !root || !root->hm.sizehashes[type].capacity)
+    if (!digest || !size || size == SIZE_MAX || !root || !root->hm.sizehashes[type].capacity)
         return CL_CLEAN;
 
-    item = cli_htu32_find(&root->hm.sizehashes[type], size);
+    item = cli_ht_size_t_find(&root->hm.sizehashes[type], size);
     if (!item)
         return CL_CLEAN;
 
@@ -364,13 +364,13 @@ void hm_free(struct cli_matcher *root)
         return;
 
     for (type = CLI_HASH_MD5; type < CLI_HASH_AVAIL_TYPES; type++) {
-        struct cli_htu32 *ht                 = &root->hm.sizehashes[type];
-        const struct cli_htu32_element *item = NULL;
+        struct cli_ht_size_t *ht                 = &root->hm.sizehashes[type];
+        const struct cli_ht_size_t_element *item = NULL;
 
         if (!root->hm.sizehashes[type].capacity)
             continue;
 
-        while ((item = cli_htu32_next(ht, item))) {
+        while ((item = cli_ht_size_t_next(ht, item))) {
             struct cli_sz_hash *szh = (struct cli_sz_hash *)item->data.as_ptr;
 
             MPOOL_FREE(root->mempool, szh->hash_array);
@@ -379,7 +379,7 @@ void hm_free(struct cli_matcher *root)
             MPOOL_FREE(root->mempool, (void *)szh->virusnames);
             MPOOL_FREE(root->mempool, szh);
         }
-        CLI_HTU32_FREE(ht, root->mempool);
+        CLI_HT_SIZE_T_FREE(ht, root->mempool);
     }
 
     for (type = CLI_HASH_MD5; type < CLI_HASH_AVAIL_TYPES; type++) {

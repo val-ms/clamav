@@ -2835,7 +2835,7 @@ static int cli_loadhash(FILE *fs, struct cl_engine *engine, unsigned int *signo,
     unsigned int size_field = 1, md5_field = 0, line = 0, sigs = 0, tokens_count;
     unsigned int req_fl = 0;
     struct cli_matcher *db;
-    unsigned long size;
+    size_t size;
 
     if (mode == MD5_MDB) {
         size_field = 0;
@@ -2902,7 +2902,7 @@ static int cli_loadhash(FILE *fs, struct cl_engine *engine, unsigned int *signo,
 
         if (strcmp(tokens[size_field], "*")) {
             size = strtoul(tokens[size_field], (char **)&pt, 10);
-            if (*pt || !size || size >= 0xffffffff) {
+            if (*pt || !size || size >= SIZE_MAX) {
                 cli_errmsg("cli_loadhash: Invalid value for the size field\n");
                 ret = CL_EMALFDB;
                 break;

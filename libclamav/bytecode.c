@@ -62,7 +62,7 @@ static const uint32_t nomatch[64] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0};
-static const uint32_t nooffsets[64] = {
+static const size_t nooffsets[64] = {
     CLI_OFF_NONE, CLI_OFF_NONE, CLI_OFF_NONE, CLI_OFF_NONE,
     CLI_OFF_NONE, CLI_OFF_NONE, CLI_OFF_NONE, CLI_OFF_NONE,
     CLI_OFF_NONE, CLI_OFF_NONE, CLI_OFF_NONE, CLI_OFF_NONE,
@@ -2820,7 +2820,7 @@ cl_error_t cli_bytecode_context_setfile(struct cli_bc_ctx *ctx, fmap_t *map)
 cl_error_t cli_bytecode_runlsig(cli_ctx *cctx, struct cli_target_info *tinfo,
                                 const struct cli_all_bc *bcs, unsigned bc_idx,
                                 const uint32_t *lsigcnt,
-                                const uint32_t *lsigsuboff, fmap_t *map)
+                                const size_t *lsigsuboff, fmap_t *map)
 {
     cl_error_t ret;
     struct cli_bc_ctx ctx;

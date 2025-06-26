@@ -44,8 +44,8 @@
  *    The key is a const char* (string)
  *    The value (data) is a buffer, stored as a size_t (instead of a void *) and an offset.
  *
- * 2. htu32 (hashtable uint32_t)
- *    Th ekey is a uint32_t number
+ * 2. ht_size_t (hashtable size_t)
+ *    Th ekey is a size_t number
  *    The value (data) is a buffer, stored as either a size_t, or as a void *, and an offset.
  */
 /******************************************************************************/
@@ -173,16 +173,16 @@ cl_error_t cli_hashtab_load(FILE *in, struct cli_hashtable *s);
  */
 cl_error_t cli_hashtab_store(const struct cli_hashtable *s, FILE *out);
 
-struct cli_htu32_element {
-    uint32_t key;
+struct cli_ht_size_t_element {
+    size_t key;
     union {
         size_t as_size_t;
         void *as_ptr;
     } data;
 };
 
-struct cli_htu32 {
-    struct cli_htu32_element *htable;
+struct cli_ht_size_t {
+    struct cli_ht_size_t_element *htable;
     size_t capacity;
     size_t used;
     size_t maxfill; /* 80% */
@@ -193,94 +193,94 @@ struct cli_htu32 {
 #ifdef USE_MPOOL
 
 /**
- * @brief A macro to wrap cli_htu32_init() where you can assume MEMPOOL is enabled,
+ * @brief A macro to wrap cli_ht_size_t_init() where you can assume MEMPOOL is enabled,
  * but will replace the last partment with NULL if MEMPOOL is not enabled.
  */
-#define CLI_HTU32_INIT(A, B, C) cli_htu32_init(A, B, C)
+#define CLI_HT_SIZE_T_INIT(A, B, C) cli_ht_size_t_init(A, B, C)
 /**
- * @brief A macro to wrap cli_htu32_insert() where you can assume MEMPOOL is enabled,
+ * @brief A macro to wrap cli_ht_size_t_insert() where you can assume MEMPOOL is enabled,
  * but will replace the last partment with NULL if MEMPOOL is not enabled.
  */
-#define CLI_HTU32_INSERT(A, B, C) cli_htu32_insert(A, B, C)
+#define CLI_HT_SIZE_T_INSERT(A, B, C) cli_ht_size_t_insert(A, B, C)
 /**
- * @brief A macro to wrap cli_htu32_free() where you can assume MEMPOOL is enabled,
+ * @brief A macro to wrap cli_ht_size_t_free() where you can assume MEMPOOL is enabled,
  * but will replace the last partment with NULL if MEMPOOL is not enabled.
  */
-#define CLI_HTU32_FREE(A, B) cli_htu32_free(A, B)
+#define CLI_HT_SIZE_T_FREE(A, B) cli_ht_size_t_free(A, B)
 
 #else
 
 /**
- * @brief A macro to wrap cli_htu32_init() where you can assume MEMPOOL is enabled,
+ * @brief A macro to wrap cli_ht_size_t_init() where you can assume MEMPOOL is enabled,
  * but will replace the last partment with NULL if MEMPOOL is not enabled.
  */
-#define CLI_HTU32_INIT(A, B, C) cli_htu32_init(A, B, NULL)
+#define CLI_HT_SIZE_T_INIT(A, B, C) cli_ht_size_t_init(A, B, NULL)
 /**
- * @brief A macro to wrap cli_htu32_insert() where you can assume MEMPOOL is enabled,
+ * @brief A macro to wrap cli_ht_size_t_insert() where you can assume MEMPOOL is enabled,
  * but will replace the last partment with NULL if MEMPOOL is not enabled.
  */
-#define CLI_HTU32_INSERT(A, B, C) cli_htu32_insert(A, B, NULL)
+#define CLI_HT_SIZE_T_INSERT(A, B, C) cli_ht_size_t_insert(A, B, NULL)
 /**
- * @brief A macro to wrap cli_htu32_free() where you can assume MEMPOOL is enabled,
+ * @brief A macro to wrap cli_ht_size_t_free() where you can assume MEMPOOL is enabled,
  * but will replace the last partment with NULL if MEMPOOL is not enabled.
  */
-#define CLI_HTU32_FREE(A, B) cli_htu32_free(A, NULL)
+#define CLI_HT_SIZE_T_FREE(A, B) cli_ht_size_t_free(A, NULL)
 
 #endif
 
 /**
- * @brief Initialize a new u32 hashtable.
+ * @brief Initialize a new size_t hashtable.
  *
  * @param s
  * @param capacity
  * @param mempool   If MEMPOOL not enabled, this can be NULL.
  * @return cl_error_t
  */
-cl_error_t cli_htu32_init(struct cli_htu32 *s, size_t capacity, mpool_t *mempool);
+cl_error_t cli_ht_size_t_init(struct cli_ht_size_t *s, size_t capacity, mpool_t *mempool);
 
 /**
- * @brief Insert a new element into the u32 hashtable.
+ * @brief Insert a new element into the size_t hashtable.
  *
  * @param s
  * @param item
  * @param mempool
  * @return cl_error_t
  */
-cl_error_t cli_htu32_insert(struct cli_htu32 *s, const struct cli_htu32_element *item, mpool_t *mempool);
+cl_error_t cli_ht_size_t_insert(struct cli_ht_size_t *s, const struct cli_ht_size_t_element *item, mpool_t *mempool);
 
 /**
- * @brief Free the u32 hashtable.
+ * @brief Free the size_t hashtable.
  *
  * This will clear the hash table first. You don't need to clear it manually first.
  *
  * @param s
  * @param mempool
  */
-void cli_htu32_free(struct cli_htu32 *s, mpool_t *mempool);
+void cli_ht_size_t_free(struct cli_ht_size_t *s, mpool_t *mempool);
 
 /**
- * @brief Find a specific element by key in the u32 hashtable.
+ * @brief Find a specific element by key in the size_t hashtable.
  *
  * @param s
  * @param key
- * @return const struct cli_htu32_element*
+ * @return const struct cli_ht_size_t_element*
  */
-const struct cli_htu32_element *cli_htu32_find(const struct cli_htu32 *s, uint32_t key);
+const struct cli_ht_size_t_element *cli_ht_size_t_find(const struct cli_ht_size_t *s, size_t key);
 
 /**
- * @brief Remove a specific element from the u32 hashtable.
+ * @brief Remove a specific element from the size_t hashtable.
  *
  * @param s
  * @param key
  */
-void cli_htu32_delete(struct cli_htu32 *s, uint32_t key);
+void cli_ht_size_t_delete(struct cli_ht_size_t *s, size_t key);
 
 /**
- * @brief Remove all elements from the u32 hashtable.
+ * @brief Remove all elements from the size_t hashtable.
  *
  * @param s
  */
-void cli_htu32_clear(struct cli_htu32 *s);
+void cli_ht_size_t_clear(struct cli_ht_size_t *s);
 
 /**
  * @brief Get the next element in the table, following the provided element
@@ -289,17 +289,17 @@ void cli_htu32_clear(struct cli_htu32 *s);
  *
  * @param s
  * @param current  If you feed it NULL, it will give you the first element.
- * @return const struct cli_htu32_element* Will return the next element, or NULL if there are no further elements.
+ * @return const struct cli_ht_size_t_element* Will return the next element, or NULL if there are no further elements.
  */
-const struct cli_htu32_element *cli_htu32_next(const struct cli_htu32 *s, const struct cli_htu32_element *current);
+const struct cli_ht_size_t_element *cli_ht_size_t_next(const struct cli_ht_size_t *s, const struct cli_ht_size_t_element *current);
 
 /**
- * @brief Get the number of items in the u32 hashtable.
+ * @brief Get the number of items in the size_t hashtable.
  *
  * @param s
  * @return size_t
  */
-size_t cli_htu32_numitems(struct cli_htu32 *s);
+size_t cli_ht_size_t_numitems(struct cli_ht_size_t *s);
 
 /******************************************************************************/
 /* a hashtable that stores the values too */
@@ -410,12 +410,12 @@ void cli_map_delete(struct cli_map *m);
 
 /******************************************************************************/
 /* A set of unique keys (no values).
- * The keys are just uint32_t numbers. */
+ * The keys are just size_t numbers. */
 /******************************************************************************/
 
 struct cli_hashset {
-    uint32_t *keys;
-    uint32_t *bitmap;
+    size_t *keys;
+    size_t *bitmap;
     mpool_t *mempool;
     uint32_t capacity;
     uint32_t mask;
@@ -455,7 +455,7 @@ cl_error_t cli_hashset_init_pool(struct cli_hashset *hs, size_t initial_capacity
  * @param key
  * @return cl_error_t
  */
-cl_error_t cli_hashset_addkey(struct cli_hashset *hs, const uint32_t key);
+cl_error_t cli_hashset_addkey(struct cli_hashset *hs, const size_t key);
 
 /**
  * @brief Remove a key from the hashset
@@ -464,7 +464,7 @@ cl_error_t cli_hashset_addkey(struct cli_hashset *hs, const uint32_t key);
  * @param key
  * @return cl_error_t
  */
-cl_error_t cli_hashset_removekey(struct cli_hashset *hs, const uint32_t key);
+cl_error_t cli_hashset_removekey(struct cli_hashset *hs, const size_t key);
 
 /**
  * @brief Find out if hashset contains akey
@@ -474,7 +474,7 @@ cl_error_t cli_hashset_removekey(struct cli_hashset *hs, const uint32_t key);
  * @return true  If found
  * @return false If not found
  */
-bool cli_hashset_contains(const struct cli_hashset *hs, const uint32_t key);
+bool cli_hashset_contains(const struct cli_hashset *hs, const size_t key);
 
 /**
  * @brief Destroy/deallocate a hashset.
@@ -484,7 +484,7 @@ bool cli_hashset_contains(const struct cli_hashset *hs, const uint32_t key);
 void cli_hashset_destroy(struct cli_hashset *hs);
 
 /**
- * @brief Convert the hashset to an array of uint32_t's
+ * @brief Convert the hashset to an array of size_t's
  *
  * It will allocate a 0-length array! You are still responsible for freeing it if
  * it returns 0!
@@ -495,7 +495,7 @@ void cli_hashset_destroy(struct cli_hashset *hs);
  * @param [out] array  Allocated array of the length returned. Caller must free it.
  * @return ssize_t     The length of the array if success, or else -1 if failed.
  */
-ssize_t cli_hashset_toarray(const struct cli_hashset *hs, uint32_t **array);
+ssize_t cli_hashset_toarray(const struct cli_hashset *hs, size_t **array);
 
 /**
  * @brief Initializes the set without allocating memory
@@ -519,6 +519,6 @@ void cli_hashset_init_noalloc(struct cli_hashset *hs);
  * @return true  If found
  * @return false If not found
  */
-bool cli_hashset_contains_maybe_noalloc(const struct cli_hashset *hs, const uint32_t key);
+bool cli_hashset_contains_maybe_noalloc(const struct cli_hashset *hs, const size_t key);
 
 #endif

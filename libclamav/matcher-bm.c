@@ -43,7 +43,7 @@
 cl_error_t cli_bm_addpatt(struct cli_matcher *root, struct cli_bm_patt *pattern, const char *offset)
 {
     uint16_t idx, i;
-    const unsigned char *pt = pattern->pattern;
+    const uint8_t *pt = pattern->pattern;
     struct cli_bm_patt *prev, *next = NULL;
     cl_error_t ret;
 
@@ -168,12 +168,12 @@ cl_error_t cli_bm_initoff(const struct cli_matcher *root, struct cli_bm_off *dat
     }
 
     data->cnt = data->pos = 0;
-    data->offtab          = (uint32_t *)malloc(root->bm_patterns * sizeof(uint32_t));
+    data->offtab          = (size_t *)malloc(root->bm_patterns * sizeof(size_t));
     if (!data->offtab) {
         cli_errmsg("cli_bm_initoff: Can't allocate memory for data->offtab\n");
         return CL_EMEM;
     }
-    data->offset = (uint32_t *)malloc(root->bm_patterns * sizeof(uint32_t));
+    data->offset = (size_t *)malloc(root->bm_patterns * sizeof(size_t));
     if (!data->offset) {
         cli_errmsg("cli_bm_initoff: Can't allocate memory for data->offset\n");
         free(data->offtab);
@@ -243,14 +243,15 @@ void cli_bm_free(struct cli_matcher *root)
     }
 }
 
-cl_error_t cli_bm_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cli_bm_patt **patt, const struct cli_matcher *root, uint32_t offset, const struct cli_target_info *info, struct cli_bm_off *offdata, cli_ctx *ctx)
+cl_error_t cli_bm_scanbuff(const uint8_t *buffer, size_t length, const char **virname, const struct cli_bm_patt **patt, const struct cli_matcher *root, size_t offset, const struct cli_target_info *info, struct cli_bm_off *offdata, cli_ctx *ctx)
 {
-    uint32_t i, j, off, off_min, off_max;
+    size_t i, j;
+    size_t off, off_min, off_max;
     uint8_t found, pchain, shift;
     uint16_t idx, idxchk;
     struct cli_bm_patt *p;
-    const unsigned char *bp, *pt;
-    unsigned char prefix;
+    const uint8_t *bp, *pt;
+    uint8_t prefix;
     cl_error_t ret;
     int viruses_found = 0;
 

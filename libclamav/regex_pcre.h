@@ -44,12 +44,12 @@ struct cli_pcre_data {
     pcre2_match_context *mctx; /* match context */
     int options;               /* pcre options */
     char *expression;          /* copied regular expression */
-    uint32_t search_offset;    /* start offset to search at for pcre_exec */
+    size_t search_offset;    /* start offset to search at for pcre_exec */
 };
 
 struct cli_pcre_results {
     cl_error_t err;
-    uint32_t match[2]; /* populated by cli_pcre_match to be start (0) and end (1) offset of match */
+    size_t match[2]; /* populated by cli_pcre_match to be start (0) and end (1) offset of match */
 
     pcre2_match_data *match_data;
 };

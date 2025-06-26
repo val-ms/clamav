@@ -155,7 +155,7 @@ static void *load_module(const char *name, const char *featurename)
         LT_MODULE_EXT "." LIBCLAMAV_FULLVER,
         PASTE(LT_MODULE_EXT ".", LIBCLAMAV_MAJORVER),
         LT_MODULE_EXT,
-        "." LT_LIBEXT};
+        LT_LIBEXT};
     void *rhandle                = NULL;
     char *tokenized_library_path = NULL;
     char *ld_library_path        = NULL;
@@ -2680,6 +2680,11 @@ void cl_engine_set_clcb_engine_free_progress(struct cl_engine *engine, clcb_prog
 void cl_engine_set_clcb_hash(struct cl_engine *engine, clcb_hash callback)
 {
     engine->cb_hash = callback;
+}
+
+void cl_engine_set_clcb_meta_size_t(struct cl_engine *engine, clcb_meta_size_t callback)
+{
+    engine->cb_meta_size_t = callback;
 }
 
 void cl_engine_set_clcb_meta(struct cl_engine *engine, clcb_meta callback)

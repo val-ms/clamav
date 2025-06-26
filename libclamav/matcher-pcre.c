@@ -429,9 +429,9 @@ cl_error_t cli_pcre_recaloff(struct cli_matcher *root, struct cli_pcre_off *data
 {
     /* TANGENT: maintain relative offset data in cli_ac_data? */
     cl_error_t ret;
-    unsigned int i;
+    uint32_t i;
     struct cli_pcre_meta *pm;
-    uint32_t endoff;
+    size_t endoff;
 
     if (!data) {
         return CL_ENULLARG;
@@ -444,20 +444,20 @@ cl_error_t cli_pcre_recaloff(struct cli_matcher *root, struct cli_pcre_off *data
     }
 
     /* allocate data structures */
-    data->shift = (uint32_t *)calloc(root->pcre_metas, sizeof(uint32_t));
+    data->shift = (size_t *)calloc(root->pcre_metas, sizeof(size_t));
     if (!data->shift) {
         cli_errmsg("cli_pcre_initoff: cannot allocate memory for data->shift\n");
         return CL_EMEM;
     }
-    data->offset = (uint32_t *)calloc(root->pcre_metas, sizeof(uint32_t));
+    data->offset = (size_t *)calloc(root->pcre_metas, sizeof(size_t));
     if (!data->offset) {
         cli_errmsg("cli_pcre_initoff: cannot allocate memory for data->offset\n");
         free(data->shift);
         return CL_EMEM;
     }
 
-    pm_dbgmsg("CLI_OFF_NONE: %u\n", CLI_OFF_NONE);
-    pm_dbgmsg("CLI_OFF_ANY: %u\n", CLI_OFF_ANY);
+    pm_dbgmsg("CLI_OFF_NONE: %zu\n", CLI_OFF_NONE);
+    pm_dbgmsg("CLI_OFF_ANY: %zu\n", CLI_OFF_ANY);
 
     /* iterate across all pcre metadata and recalc offsets */
     for (i = 0; i < root->pcre_metas; ++i) {
@@ -514,7 +514,7 @@ void cli_pcre_freeoff(struct cli_pcre_off *data)
     }
 }
 
-int cli_pcre_qoff(struct cli_pcre_meta *pm, uint32_t length, uint32_t *adjbuffer, uint32_t *adjshift)
+cl_error_t cli_pcre_qoff(struct cli_pcre_meta *pm, size_t length, size_t *adjbuffer, size_t *adjshift)
 {
     if (!pm)
         return CL_ENULLARG;
@@ -541,7 +541,7 @@ int cli_pcre_qoff(struct cli_pcre_meta *pm, uint32_t length, uint32_t *adjbuffer
     return CL_SUCCESS;
 }
 
-cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const char **virname, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, const struct cli_pcre_off *data, cli_ctx *ctx)
+cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, size_t length, const char **virname, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, const struct cli_pcre_off *data, cli_ctx *ctx)
 {
     cl_error_t ret = CL_SUCCESS;
 
@@ -549,13 +549,13 @@ cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const 
     struct cli_pcre_data *pd;
     struct cli_pcre_results p_res;
     struct cli_ac_result *newres;
-    uint32_t adjbuffer, adjshift, adjlength;
-    unsigned int i, evalcnt = 0;
+    size_t adjbuffer, adjshift, adjlength;
+    uint32_t i, evalcnt = 0;
     uint64_t evalids = 0;
-    uint32_t global, encompass, rolling;
-    int rc          = 0;
-    int options     = 0;
-    uint32_t offset = 0;
+    bool global, encompass, rolling;
+    int rc        = 0;
+    int options   = 0;
+    size_t offset = 0;
 
     if ((root->pcre_metas == 0) || (!root->pcre_metatable) || (ctx && ctx->dconf && !(ctx->dconf->pcre & PCRE_CONF_SUPPORT)))
         return CL_SUCCESS;
@@ -637,7 +637,7 @@ cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const 
             continue;
         }
 
-        pm_dbgmsg("cli_pcre_scanbuf: passed buffer adjusted to %u +%u(%u)[%u]%s\n", adjbuffer, adjlength, adjbuffer + adjlength, adjshift, encompass ? " (encompass)" : "");
+        pm_dbgmsg("cli_pcre_scanbuf: passed buffer adjusted to %zu+%zu(%zu)[%zu]%s\n", adjbuffer, adjlength, adjbuffer + adjlength, adjshift, encompass ? " (encompass)" : "");
 
         /* if the global flag is set, loop through the scanning */
         do {
@@ -661,13 +661,13 @@ cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const 
 
             /* matched, rc shouldn't be >0 unless a full match occurs */
             if (rc > 0) {
-                cli_dbgmsg("cli_pcre_scanbuf: located regex match @ %d\n", adjbuffer + p_res.match[0]);
+                cli_dbgmsg("cli_pcre_scanbuf: located regex match @ %zu\n", adjbuffer + p_res.match[0]);
 
                 /* check if we've gone over offset+shift */
                 if (!encompass && adjshift) {
                     if (p_res.match[0] > adjshift) {
                         /* ignore matched offset (outside of maxshift) */
-                        cli_dbgmsg("cli_pcre_scanbuf: match found outside of maxshift @%u\n", adjbuffer + p_res.match[0]);
+                        cli_dbgmsg("cli_pcre_scanbuf: match found outside of maxshift @%zu\n", adjbuffer + p_res.match[0]);
                         break;
                     }
                 }

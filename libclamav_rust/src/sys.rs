@@ -839,20 +839,20 @@ extern "C" {
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct cli_htu32_element {
+pub struct cli_ht_size_t_element {
     pub key: u32,
-    pub data: cli_htu32_element__bindgen_ty_1,
+    pub data: cli_ht_size_t_element__bindgen_ty_1,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub union cli_htu32_element__bindgen_ty_1 {
+pub union cli_ht_size_t_element__bindgen_ty_1 {
     pub as_size_t: usize,
     pub as_ptr: *mut ::std::os::raw::c_void,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct cli_htu32 {
-    pub htable: *mut cli_htu32_element,
+pub struct cli_ht_size_t {
+    pub htable: *mut cli_ht_size_t_element,
     pub capacity: usize,
     pub used: usize,
     pub maxfill: usize,
@@ -1012,7 +1012,7 @@ pub struct cli_sz_hash {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct cli_hash_patt {
-    pub sizehashes: [cli_htu32; 3usize],
+    pub sizehashes: [cli_ht_size_t; 3usize],
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1038,7 +1038,7 @@ pub struct cli_pcre_data {
     pub mctx: *mut pcre2_match_context_8,
     pub options: ::std::os::raw::c_int,
     pub expression: *mut ::std::os::raw::c_char,
-    pub search_offset: u32,
+    pub search_offset: usize,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

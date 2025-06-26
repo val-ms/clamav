@@ -833,8 +833,7 @@ int cli_ac_chklsig(const char *expr, const char *end, uint32_t *lsigcnt, unsigne
                     return -1;
                 }
 
-                for (i += 2; i + 1 < len && (isdigit(expr[i + 1]) || expr[i + 1] == ','); i++)
-                    ;
+                for (i += 2; i + 1 < len && (isdigit(expr[i + 1]) || expr[i + 1] == ','); i++);
             }
 
             if (&expr[i + 1] == rend)
@@ -1013,12 +1012,12 @@ int cli_ac_chklsig(const char *expr, const char *end, uint32_t *lsigcnt, unsigne
     }
 }
 
-inline static int ac_findmatch_special(const unsigned char *buffer, uint32_t offset, uint32_t bp, uint32_t fileoffset, uint32_t length,
-                                       const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, uint32_t *start, uint32_t *end, int rev);
-static int ac_backward_match_branch(const unsigned char *buffer, uint32_t bp, uint32_t offset, uint32_t length, uint32_t fileoffset,
-                                    const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, uint32_t *start, uint32_t *end);
-static int ac_forward_match_branch(const unsigned char *buffer, uint32_t bp, uint32_t offset, uint32_t length, uint32_t fileoffset,
-                                   const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, uint32_t *start, uint32_t *end);
+inline static int ac_findmatch_special(const unsigned char *buffer, size_t offset, size_t bp, size_t fileoffset, size_t length,
+                                       const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, size_t *start, size_t *end, int rev);
+static int ac_backward_match_branch(const unsigned char *buffer, size_t bp, size_t offset, size_t fileoffset, size_t length,
+                                    const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, size_t *start, size_t *end);
+static int ac_forward_match_branch(const unsigned char *buffer, size_t bp, size_t offset, size_t fileoffset, size_t length,
+                                   const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, size_t *start, size_t *end);
 
 /* call only by ac_findmatch_special! Does not handle recursive specials */
 #define AC_MATCH_CHAR2(p, b)                                         \
@@ -1099,13 +1098,13 @@ static int ac_forward_match_branch(const unsigned char *buffer, uint32_t bp, uin
     }
 
 /* special handler */
-inline static int ac_findmatch_special(const unsigned char *buffer, uint32_t offset, uint32_t bp, uint32_t fileoffset, uint32_t length,
-                                       const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, uint32_t *start, uint32_t *end, int rev)
+inline static int ac_findmatch_special(const unsigned char *buffer, size_t offset, size_t bp, size_t fileoffset, size_t length,
+                                       const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, size_t *start, size_t *end, int rev)
 {
     int match, cmp;
     uint16_t j, b = buffer[bp];
     uint16_t wc;
-    uint32_t subbp;
+    size_t subbp;
     struct cli_ac_special *special = pattern->special_table[specialcnt];
     struct cli_alt_node *alt       = NULL;
 
@@ -1129,9 +1128,9 @@ inline static int ac_findmatch_special(const unsigned char *buffer, uint32_t off
                     break;
                 subbp = bp;
             } else {
-                if (bp < (uint32_t)(special->len[0] - 1))
+                if (bp < (size_t)(special->len[0] - 1))
                     break;
-                subbp = bp - (uint32_t)(special->len[0] - 1);
+                subbp = bp - (size_t)(special->len[0] - 1);
             }
 
             match *= special->len[0];
@@ -1155,11 +1154,11 @@ inline static int ac_findmatch_special(const unsigned char *buffer, uint32_t off
                     }
                     subbp = bp;
                 } else {
-                    if (bp < (uint32_t)(alt->len - 1)) {
+                    if (bp < (size_t)(alt->len - 1)) {
                         alt = alt->next;
                         continue;
                     }
-                    subbp = bp - (uint32_t)(alt->len - 1);
+                    subbp = bp - (size_t)(alt->len - 1);
                 }
 
                 /* note that generic alternates CANNOT be negated */
@@ -1215,12 +1214,12 @@ inline static int ac_findmatch_special(const unsigned char *buffer, uint32_t off
 
 /* state should reset on call, recursion depth = number of alternate specials */
 /* each loop iteration starts on the NEXT sequence to be validated */
-static int ac_backward_match_branch(const unsigned char *buffer, uint32_t bp, uint32_t offset, uint32_t fileoffset, uint32_t length,
-                                    const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, uint32_t *start, uint32_t *end)
+static int ac_backward_match_branch(const unsigned char *buffer, size_t bp, size_t offset, size_t fileoffset, size_t length,
+                                    const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, size_t *start, size_t *end)
 {
     int match = 0;
     uint16_t wc, i;
-    uint32_t filestart;
+    size_t filestart;
 
     /* backwards (prefix) validation, determines start */
     if (pattern->prefix && pattern->prefix_length[0]) {
@@ -1307,8 +1306,8 @@ static int ac_backward_match_branch(const unsigned char *buffer, uint32_t bp, ui
 
 /* state should reset on call, recursion depth = number of alternate specials */
 /* each loop iteration starts on the NEXT sequence to validate */
-static int ac_forward_match_branch(const unsigned char *buffer, uint32_t bp, uint32_t offset, uint32_t fileoffset, uint32_t length,
-                                   const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, uint32_t *start, uint32_t *end)
+static int ac_forward_match_branch(const unsigned char *buffer, size_t bp, size_t offset, size_t fileoffset, size_t length,
+                                   const struct cli_ac_patt *pattern, uint32_t pp, uint16_t specialcnt, size_t *start, size_t *end)
 {
     int match;
     uint16_t wc, i;
@@ -1383,7 +1382,7 @@ static int ac_forward_match_branch(const unsigned char *buffer, uint32_t bp, uin
     return ac_backward_match_branch(buffer, offset - 1, offset, fileoffset, length, pattern, pattern->prefix_length[0] - 1, pattern->special_pattern - 1, start, end);
 }
 
-inline static int ac_findmatch(const unsigned char *buffer, uint32_t offset, uint32_t fileoffset, uint32_t length, const struct cli_ac_patt *pattern, uint32_t *start, uint32_t *end)
+inline static int ac_findmatch(const unsigned char *buffer, size_t offset, size_t fileoffset, size_t length, const struct cli_ac_patt *pattern, size_t *start, size_t *end)
 {
     int match;
     uint16_t specialcnt = pattern->special_pattern;
@@ -1412,7 +1411,7 @@ cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t
 
     data->reloffsigs = reloffsigs;
     if (reloffsigs) {
-        data->offset = (uint32_t *)malloc(reloffsigs * 2 * sizeof(uint32_t));
+        data->offset = (size_t *)malloc(reloffsigs * 2 * sizeof(size_t));
         if (!data->offset) {
             cli_errmsg("cli_ac_init: Can't allocate memory for data->offset\n");
             return CL_EMEM;
@@ -1423,7 +1422,7 @@ cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t
 
     data->partsigs = partsigs;
     if (partsigs) {
-        data->offmatrix = (uint32_t ***)calloc(partsigs, sizeof(uint32_t **));
+        data->offmatrix = (size_t ***)calloc(partsigs, sizeof(size_t **));
         if (!data->offmatrix) {
             cli_errmsg("cli_ac_init: Can't allocate memory for data->offmatrix\n");
 
@@ -1488,8 +1487,8 @@ cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t
             cli_errmsg("cli_ac_init: Can't allocate memory for data->lsig_matches\n");
             return CL_EMEM;
         }
-        data->lsigsuboff_last  = (uint32_t **)malloc(lsigs * sizeof(uint32_t *));
-        data->lsigsuboff_first = (uint32_t **)malloc(lsigs * sizeof(uint32_t *));
+        data->lsigsuboff_last  = (size_t **)malloc(lsigs * sizeof(size_t *));
+        data->lsigsuboff_first = (size_t **)malloc(lsigs * sizeof(size_t *));
         if (!data->lsigsuboff_last || !data->lsigsuboff_first) {
             free(data->lsig_matches);
             free(data->lsigsuboff_last);
@@ -1506,8 +1505,8 @@ cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t
             cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigsuboff_(last|first)\n");
             return CL_EMEM;
         }
-        data->lsigsuboff_last[0]  = (uint32_t *)calloc(lsigs * 64, sizeof(uint32_t));
-        data->lsigsuboff_first[0] = (uint32_t *)calloc(lsigs * 64, sizeof(uint32_t));
+        data->lsigsuboff_last[0]  = (size_t *)calloc(lsigs * 64, sizeof(size_t));
+        data->lsigsuboff_first[0] = (size_t *)calloc(lsigs * 64, sizeof(size_t));
         if (!data->lsigsuboff_last[0] || !data->lsigsuboff_first[0]) {
             free(data->lsig_matches);
             free(data->lsigsuboff_last[0]);
@@ -1663,7 +1662,7 @@ void lsig_increment_subsig_match(struct cli_ac_data *mdata, uint32_t lsig_id, ui
     mdata->lsigcnt[lsig_id][subsig_id]++;
 }
 
-cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t lsig_id, uint32_t subsig_id, uint32_t realoff, int partial)
+cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t lsig_id, uint32_t subsig_id, size_t realoff, int partial)
 {
     const struct cli_ac_lsig *ac_lsig = root->ac_lsigtable[lsig_id];
     const struct cli_lsig_tdb *tdb    = &ac_lsig->tdb;
@@ -1700,7 +1699,7 @@ cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *
             struct cli_subsig_matches *ss_matches;
             struct cli_lsig_matches *ls_matches;
 
-            cli_dbgmsg("lsig_sub_matched lsig %u:%u at %u\n", lsig_id, subsig_id, realoff);
+            cli_dbgmsg("lsig_sub_matched lsig %u:%u at %zu\n", lsig_id, subsig_id, realoff);
 
             ls_matches = mdata->lsig_matches[lsig_id];
             if (ls_matches == NULL) { /* allocate cli_lsig_matches */
@@ -1746,7 +1745,8 @@ cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *
          * This check is only done after the 1st match.
          */
         const struct cli_ac_patt *macropt;
-        uint32_t id, last_macro_match, smin, smax, macro_group_id, last_macroprev_match;
+        uint32_t id, smin, smax, macro_group_id, last_macroprev_match;
+        size_t last_macro_match;
 
         /*
          * Look up the subsig for the upcoming macro to get anchor-min/max, and macro group id.
@@ -1775,7 +1775,7 @@ cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *
             mdata->lsigsuboff_last[lsig_id][subsig_id] = realoff;
         } else {
             /* mark the macro sig itself matched */
-            cli_dbgmsg("Checking macro match: %u + (%u - %u) == %u\n",
+            cli_dbgmsg("Checking macro match: %u + (%u - %u) == %zu\n",
                        last_macroprev_match, smin, smax, last_macro_match);
 
             mdata->lsigcnt[lsig_id][subsig_id + 1]++;
@@ -1804,13 +1804,13 @@ cl_error_t cli_ac_chkmacro(struct cli_matcher *root, struct cli_ac_data *data, u
 
 cl_error_t cli_ac_scanbuff(
     const unsigned char *buffer,
-    uint32_t length,
+    size_t length,
     const char **virname,
     void **customdata,
     struct cli_ac_result **res,
     const struct cli_matcher *root,
     struct cli_ac_data *mdata,
-    uint32_t offset,
+    size_t offset,
     cli_file_t ftype,
     struct cli_matched_type **ftoffset,
     unsigned int mode,
@@ -1819,10 +1819,11 @@ cl_error_t cli_ac_scanbuff(
     struct cli_ac_node *current;
     struct cli_ac_list *pattN, *ptN;
     struct cli_ac_patt *patt, *pt;
-    uint32_t i, bp, exptoff[2], realoff, matchstart, matchend;
+    size_t i, bp, matchstart, matchend;
+    size_t exptoff[2], realoff;
     uint16_t j;
     uint8_t found, viruses_found = 0;
-    uint32_t **offmatrix, swp;
+    size_t **offmatrix, swp;
     cli_file_t type = CL_TYPE_ANY;
     struct cli_ac_result *newres;
     cl_error_t rc;
@@ -1890,7 +1891,7 @@ cl_error_t cli_ac_scanbuff(
                                 ptN = ptN->next_same;
                                 continue;
                             }
-                            cli_dbgmsg("cli_ac_scanbuff: VI match for offset %x\n", realoff);
+                            cli_dbgmsg("cli_ac_scanbuff: VI match for offset %zx\n", realoff);
                         } else if (pt->offdata[0] == CLI_OFF_MACRO) {
                             mdata->macro_lastmatch[patt->offdata[1]] = realoff;
                             ptN                                      = ptN->next_same;
@@ -1932,14 +1933,14 @@ cl_error_t cli_ac_scanbuff(
                                     return CL_EMEM;
                                 }
 
-                                mdata->offmatrix[pt->sigid - 1][0] = malloc(pt->parts * (CLI_DEFAULT_AC_TRACKLEN + 2) * sizeof(uint32_t));
+                                mdata->offmatrix[pt->sigid - 1][0] = malloc(pt->parts * (CLI_DEFAULT_AC_TRACKLEN + 2) * sizeof(size_t));
                                 if (!mdata->offmatrix[pt->sigid - 1][0]) {
                                     cli_errmsg("cli_ac_scanbuff: Can't allocate memory for mdata->offmatrix[%u][0]\n", pt->sigid - 1);
                                     free(mdata->offmatrix[pt->sigid - 1]);
                                     mdata->offmatrix[pt->sigid - 1] = NULL;
                                     return CL_EMEM;
                                 }
-                                memset(mdata->offmatrix[pt->sigid - 1][0], (uint32_t)-1, pt->parts * (CLI_DEFAULT_AC_TRACKLEN + 2) * sizeof(uint32_t));
+                                memset(mdata->offmatrix[pt->sigid - 1][0], 0xff, pt->parts * (CLI_DEFAULT_AC_TRACKLEN + 2) * sizeof(uint32_t));
                                 mdata->offmatrix[pt->sigid - 1][0][0] = 0;
                                 for (j = 1; j < pt->parts; j++) {
                                     mdata->offmatrix[pt->sigid - 1][j]    = mdata->offmatrix[pt->sigid - 1][0] + j * (CLI_DEFAULT_AC_TRACKLEN + 2);
@@ -1950,7 +1951,7 @@ cl_error_t cli_ac_scanbuff(
 
                             found = 0;
                             if (pt->partno != 1) {
-                                for (j = 1; (j <= CLI_DEFAULT_AC_TRACKLEN + 1) && (offmatrix[pt->partno - 2][j] != (uint32_t)-1); j++) {
+                                for (j = 1; (j <= CLI_DEFAULT_AC_TRACKLEN + 1) && (offmatrix[pt->partno - 2][j] != (size_t)-1); j++) {
                                     found = j;
                                     if (realoff < offmatrix[pt->partno - 2][j])
                                         found = 0;
@@ -2004,12 +2005,12 @@ cl_error_t cli_ac_scanbuff(
                                             /* FIXME: the first offset in the array is most likely the correct one but
                                              * it may happen it is not
                                              */
-                                            for (j = 1; j <= CLI_DEFAULT_AC_TRACKLEN + 1 && offmatrix[0][j] != (uint32_t)-1; j++)
+                                            for (j = 1; j <= CLI_DEFAULT_AC_TRACKLEN + 1 && offmatrix[0][j] != (size_t)-1; j++)
                                                 if (ac_addtype(ftoffset, type, offmatrix[pt->parts - 1][j], ctx))
                                                     return CL_EMEM;
                                         }
 
-                                        memset(offmatrix[0], (uint32_t)-1, pt->parts * (CLI_DEFAULT_AC_TRACKLEN + 2) * sizeof(uint32_t));
+                                        memset(offmatrix[0], 0xff, pt->parts * (CLI_DEFAULT_AC_TRACKLEN + 2) * sizeof(uint32_t));
                                         for (j = 0; j < pt->parts; j++)
                                             offmatrix[j][0] = 0;
                                     }
@@ -2064,7 +2065,7 @@ cl_error_t cli_ac_scanbuff(
                                 if ((pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) &&
                                     (pt->rtype == CL_TYPE_ANY || ftype == pt->rtype)) {
 
-                                    cli_dbgmsg("Matched signature for file type %s at %u\n", pt->virname, realoff);
+                                    cli_dbgmsg("Matched signature for file type %s at %zu\n", pt->virname, realoff);
                                     type = pt->type;
                                     if ((ftoffset != NULL) &&
                                         ((*ftoffset == NULL) || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && (type == CL_TYPE_MBR || type >= CL_TYPE_SFX || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP || ftype == CL_TYPE_MSOLE2) && type == CL_TYPE_MSEXE))) {
@@ -2607,7 +2608,7 @@ inline static int ac_special_altstr(const char *hexpr, uint8_t sigopts, struct c
 }
 
 /* FIXME: clean up the code */
-cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint8_t sigopts, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t rtype, uint16_t type, uint32_t mindist, uint32_t maxdist, const char *offset, const uint32_t *lsigid, unsigned int options)
+cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint8_t sigopts, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t rtype, uint16_t type, size_t mindist, size_t maxdist, const char *offset, const uint32_t *lsigid, unsigned int options)
 {
     struct cli_ac_patt *new;
     char *pt, *pt2, *hex = NULL, *hexcpy = NULL;

@@ -31,25 +31,33 @@
 #define BM_BOUNDARY_EOL 1
 
 struct cli_bm_patt {
-    unsigned char *pattern, *prefix;
+    uint8_t *pattern;
+    uint8_t *prefix;
     char *virname;
-    uint32_t offdata[4], offset_min, offset_max;
+    size_t offdata[4];
+    size_t offset_min;
+    size_t offset_max;
     struct cli_bm_patt *next;
-    uint16_t length, prefix_length;
+    uint16_t length;
+    uint16_t prefix_length;
     uint16_t cnt;
-    unsigned char pattern0;
-    uint32_t boundary, filesize;
+    uint8_t pattern0;
+    size_t boundary;
+    size_t filesize;
 };
 
 struct cli_bm_off {
-    uint32_t *offset, *offtab, cnt, pos;
+    size_t *offset;
+    size_t *offtab;
+    size_t cnt;
+    size_t pos;
 };
 
 cl_error_t cli_bm_addpatt(struct cli_matcher *root, struct cli_bm_patt *pattern, const char *offset);
 cl_error_t cli_bm_init(struct cli_matcher *root);
 cl_error_t cli_bm_initoff(const struct cli_matcher *root, struct cli_bm_off *data, const struct cli_target_info *info);
 void cli_bm_freeoff(struct cli_bm_off *data);
-cl_error_t cli_bm_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cli_bm_patt **patt, const struct cli_matcher *root, uint32_t offset, const struct cli_target_info *info, struct cli_bm_off *offdata, cli_ctx *ctx);
+cl_error_t cli_bm_scanbuff(const uint8_t *buffer, size_t length, const char **virname, const struct cli_bm_patt **patt, const struct cli_matcher *root, size_t offset, const struct cli_target_info *info, struct cli_bm_off *offdata, cli_ctx *ctx);
 void cli_bm_free(struct cli_matcher *root);
 
 #endif

@@ -41,7 +41,7 @@
 
 /* stores offset data */
 struct cli_pcre_off {
-    uint32_t *offset, *shift;
+    size_t *offset, *shift;
 };
 
 #define PCRE_BYPASS "7374756c747a676574737265676578"
@@ -56,8 +56,8 @@ struct cli_pcre_meta {
     uint32_t lsigid[3]; /* 0=valid, 1=lsigid, 2=subsigid */
     struct cli_pcre_data pdata;
     /* clamav offset data */
-    uint32_t offdata[4];
-    uint32_t offset_min, offset_max;
+    size_t offdata[4];
+    size_t offset_min, offset_max;
     /* internal flags (bitfield?) */
     uint32_t flags;
     /* performance tracking */
@@ -70,7 +70,7 @@ void cli_pcre_freemeta(struct cli_matcher *root, struct cli_pcre_meta *pm);
 void cli_pcre_freetable(struct cli_matcher *root);
 
 cl_error_t cli_pcre_build(struct cli_matcher *root, long long unsigned match_limit, long long unsigned recmatch_limit, const struct cli_dconf *dconf);
-cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, uint32_t length, const char **virname, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, const struct cli_pcre_off *data, cli_ctx *ctx);
+cl_error_t cli_pcre_scanbuf(const unsigned char *buffer, size_t length, const char **virname, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, const struct cli_pcre_off *data, cli_ctx *ctx);
 cl_error_t cli_pcre_recaloff(struct cli_matcher *root, struct cli_pcre_off *data, struct cli_target_info *info, cli_ctx *ctx);
 void cli_pcre_freeoff(struct cli_pcre_off *data);
 

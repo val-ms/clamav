@@ -1316,6 +1316,46 @@ extern void cl_engine_set_clcb_hash(struct cl_engine *engine, clcb_hash callback
  * @return                  CL_VIRUS to block (alert on)
  * @return                  CL_CLEAN to continue scanning
  */
+typedef cl_error_t (*clcb_meta_size_t)(
+    const char *container_type,
+    size_t fsize_container,
+    const char *filename,
+    size_t fsize_real,
+    bool is_encrypted,
+    size_t filepos_container,
+    void *context);
+/**
+ * @brief Set a custom archive metadata matching callback function.
+ *
+ * Caution: changing options for an engine that is in-use is not thread-safe!
+ *
+ * @param engine    The initialized scanning engine.
+ * @param callback  The callback function pointer.
+ */
+extern void cl_engine_set_clcb_meta_size_t(struct cl_engine *engine, clcb_meta_size_t callback);
+
+/**
+ * @brief Archive meta matching callback function.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `clcb_meta_size_t` with `cl_engine_set_clcb_meta_size_t()` instead.
+ *
+ * May be used to block archive/container samples based on archive metadata.
+ * Function is invoked multiple times per archive. Typically once per contained file.
+ *
+ * Note: Used by the --archive-verbose clamscan option. Overriding this will alter
+ * the output from --archive-verbose.
+ *
+ * @param container_type    String name of type (CL_TYPE).
+ * @param fsize_container   Sample size
+ * @param filename          Filename associated with the data in archive.
+ * @param fsize_real        Size of file after decompression (according to the archive).
+ * @param is_encrypted      Boolean non-zero if the contained file is encrypted.
+ * @param filepos_container File index in container.
+ * @param context           Opaque application provided data.
+ * @return                  CL_VIRUS to block (alert on)
+ * @return                  CL_CLEAN to continue scanning
+ */
 typedef cl_error_t (*clcb_meta)(
     const char *container_type,
     unsigned long fsize_container,

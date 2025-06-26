@@ -209,8 +209,8 @@ static cl_error_t post(int fd, int result, const char *virname, void *context)
     return CL_CLEAN;
 }
 
-static cl_error_t meta(const char *container_type, unsigned long fsize_container, const char *filename,
-                       unsigned long fsize_real, int is_encrypted, unsigned int filepos_container, void *context)
+static cl_error_t meta(const char *container_type, size_t fsize_container, const char *filename,
+                       size_t fsize_real, bool is_encrypted, size_t filepos_container, void *context)
 {
     char prev[128];
     struct metachain *c;
@@ -1487,7 +1487,7 @@ int scanmanager(const struct optstruct *opts)
     }
 
     if (optget(opts, "archive-verbose")->enabled) {
-        cl_engine_set_clcb_meta(engine, meta);
+        cl_engine_set_clcb_meta_size_t(engine, meta);
         cl_engine_set_clcb_pre_cache(engine, pre);
         cl_engine_set_clcb_post_scan(engine, post);
     }

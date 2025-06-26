@@ -1582,7 +1582,7 @@ cli_vba_readdir(const char *dir, struct uniq *U, uint32_t which)
         lseek(fd, (8 * byte_count) + 5, SEEK_CUR);
         if (!read_uint32(fd, &offset, big_endian))
             break;
-        cli_dbgmsg("vba_readdir: offset: %u\n", (unsigned int)offset);
+        cli_dbgmsg("vba_readdir: offset: " STDu32 "\n", offset);
         vba_project->offset[i] = offset;
         lseek(fd, 2, SEEK_CUR);
     }

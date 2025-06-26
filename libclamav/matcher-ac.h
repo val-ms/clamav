@@ -48,7 +48,7 @@
 struct cli_subsig_matches {
     uint32_t last;
     uint32_t next;
-    uint32_t offsets[16]; /* offsets[] is variable length */
+    size_t offsets[16]; /* offsets[] is variable length */
 };
 
 struct cli_lsig_matches {
@@ -57,14 +57,14 @@ struct cli_lsig_matches {
 };
 
 typedef struct cli_ac_data {
-    uint32_t ***offmatrix;
+    size_t ***offmatrix;
     uint32_t partsigs, lsigs, reloffsigs;
     uint32_t **lsigcnt;
-    uint32_t **lsigsuboff_last, **lsigsuboff_first;
+    size_t **lsigsuboff_last, **lsigsuboff_first;
     struct cli_lsig_matches **lsig_matches;
     uint8_t *yr_matches;
-    uint32_t *offset;
-    uint32_t macro_lastmatch[32];
+    size_t *offset;
+    size_t macro_lastmatch[32];
     /** Hashset for versioninfo matching */
     const struct cli_hashset *vinfo;
     uint32_t min_partno;
@@ -88,8 +88,12 @@ struct cli_ac_special {
 };
 
 struct cli_ac_patt {
-    uint16_t *pattern, *prefix, length[3], prefix_length[3];
-    uint32_t mindist, maxdist;
+    uint16_t *pattern;
+    uint16_t *prefix;
+    uint16_t length[3];
+    uint16_t prefix_length[3];
+    size_t mindist;
+    size_t maxdist;
     uint32_t sigid;
     uint32_t lsigid[3];
     uint16_t ch[2];
@@ -97,11 +101,17 @@ struct cli_ac_patt {
     void *customdata;
     uint16_t ch_mindist[2];
     uint16_t ch_maxdist[2];
-    uint16_t parts, partno, special, special_pattern;
+    uint16_t parts;
+    uint16_t partno;
+    uint16_t special;
+    uint16_t special_pattern;
     struct cli_ac_special **special_table;
-    uint16_t rtype, type;
-    uint32_t offdata[4], offset_min, offset_max;
-    uint32_t boundary;
+    uint16_t rtype;
+    uint16_t type;
+    size_t offdata[4];
+    size_t offset_min;
+    size_t offset_max;
+    size_t boundary;
     uint8_t depth;
     uint8_t sigopts;
 };
@@ -162,12 +172,12 @@ cl_error_t cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t
  * @param partial   0 if whole pattern, or >0 for a partial-patterns. That is one split with wildcards like * or {n-m}.
  * @return cl_error_t
  */
-cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t lsig_id, uint32_t subsig_id, uint32_t realoff, int partial);
+cl_error_t lsig_sub_matched(const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t lsig_id, uint32_t subsig_id, size_t realoff, int partial);
 
 cl_error_t cli_ac_chkmacro(struct cli_matcher *root, struct cli_ac_data *data, unsigned lsigid1);
 int cli_ac_chklsig(const char *expr, const char *end, uint32_t *lsigcnt, unsigned int *cnt, uint64_t *ids, unsigned int parse_only);
 void cli_ac_freedata(struct cli_ac_data *data);
-cl_error_t cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, void **customdata, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t offset, cli_file_t ftype, struct cli_matched_type **ftoffset, unsigned int mode, cli_ctx *ctx);
+cl_error_t cli_ac_scanbuff(const unsigned char *buffer, size_t length, const char **virname, void **customdata, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, size_t offset, cli_file_t ftype, struct cli_matched_type **ftoffset, unsigned int mode, cli_ctx *ctx);
 cl_error_t cli_ac_buildtrie(struct cli_matcher *root);
 cl_error_t cli_ac_init(struct cli_matcher *root, uint8_t mindepth, uint8_t maxdepth, uint8_t dconf_prefiltering);
 cl_error_t cli_ac_caloff(const struct cli_matcher *root, struct cli_ac_data *data, const struct cli_target_info *info);
@@ -179,6 +189,6 @@ void cli_ac_free(struct cli_matcher *root);
  * Complex sub-patterns are the body content between `{n-m}` and `{*}` wildcards in content match signatures.
  * And `{n}` wildcards should have already been replaced with `??` characters and are included in the patterns.
  */
-cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint8_t sigopts, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t rtype, uint16_t type, uint32_t mindist, uint32_t maxdist, const char *offset, const uint32_t *lsigid, unsigned int options);
+cl_error_t cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint8_t sigopts, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t rtype, uint16_t type, size_t mindist, size_t maxdist, const char *offset, const uint32_t *lsigid, unsigned int options);
 
 #endif

@@ -97,9 +97,10 @@ static inline int perf_log_tries(int8_t acmode, int8_t bm_called, int32_t length
 #endif
 
 static inline cl_error_t matcher_run(const struct cli_matcher *root,
-                                     const unsigned char *buffer, uint32_t length,
+                                     const unsigned char *buffer,
+                                     size_t length,
                                      const char **virname, struct cli_ac_data *mdata,
-                                     uint32_t offset,
+                                     size_t offset,
                                      const struct cli_target_info *tinfo,
                                      cli_file_t ftype,
                                      struct cli_matched_type **ftoffset,
@@ -112,9 +113,9 @@ static inline cl_error_t matcher_run(const struct cli_matcher *root,
                                      cli_ctx *ctx)
 {
     cl_error_t ret, saved_ret = CL_CLEAN;
-    int32_t pos = 0;
+    ssize_t pos = 0;
     struct filter_match_info info;
-    uint32_t orig_length, orig_offset;
+    size_t orig_length, orig_offset;
     const unsigned char *orig_buffer;
 
     if (root->filter) {
@@ -220,7 +221,7 @@ static inline cl_error_t matcher_run(const struct cli_matcher *root,
                     return CL_EMAXSIZE;
                 }
 
-                cli_dbgmsg("matcher_run: performing regex matching on full map: %u+%u(%u) >= %zu\n", offset, length, offset + length, map->len);
+                cli_dbgmsg("matcher_run: performing regex matching on full map: %zu+%zu(%zu) >= %zu\n", offset, length, offset + length, map->len);
 
                 buffer = fmap_need_off_once(map, 0, map->len);
                 if (!buffer)
@@ -235,11 +236,11 @@ static inline cl_error_t matcher_run(const struct cli_matcher *root,
             if (rc != CL_SUCCESS)
                 return rc;
             if (maxfilesize && (length > maxfilesize)) {
-                cli_dbgmsg("matcher_run: pcre max filesize (buf) exceeded (limit: %llu, needed: %u)\n", (long long unsigned)maxfilesize, length);
+                cli_dbgmsg("matcher_run: pcre max filesize (buf) exceeded (limit: " STDu64 ", needed: %zu)\n", maxfilesize, length);
                 return CL_EMAXSIZE;
             }
 
-            cli_dbgmsg("matcher_run: performing regex matching on buffer with no map: %u+%u(%u)\n", offset, length, offset + length);
+            cli_dbgmsg("matcher_run: performing regex matching on buffer with no map: %zu+%zu(%zu)\n", offset, length, offset + length);
             /* scan the specified buffer */
             ret = cli_pcre_scanbuf(buffer, length, virname, acres, root, mdata, poffdata, ctx);
         }
@@ -345,11 +346,12 @@ cl_error_t cli_scan_buff(const unsigned char *buffer, uint32_t length, uint32_t 
  * offdata[2]: max shift
  * offdata[3]: section number
  */
-cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, cli_target_t target, uint32_t *offdata, uint32_t *offset_min, uint32_t *offset_max)
+cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, cli_target_t target, size_t *offdata, size_t *offset_min, size_t *offset_max)
 {
     char offcpy[65] = {0};
-    unsigned int n = 0, val = 0;
-    char *pt = NULL;
+    size_t n        = 0;
+    size_t val      = 0;
+    char *pt        = NULL;
 
     if (!info) { /* decode offset string */
         if (!offstr) {
@@ -410,7 +412,7 @@ cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, cl
                 }
                 offdata[1] = atoi(&offcpy[3]);
 
-            } else if (sscanf(offcpy, "S%u+%u", &n, &val) == 2) {
+            } else if (sscanf(offcpy, "S%zu+%zu", &n, &val) == 2) {
                 offdata[0] = CLI_OFF_SX_PLUS;
                 offdata[1] = val;
                 offdata[3] = n;
@@ -430,7 +432,7 @@ cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, cl
             /* versioninfo */
             offdata[0] = CLI_OFF_VERSION;
         } else if (strchr(offcpy, '$')) {
-            if (sscanf(offcpy, "$%u$", &n) != 1) {
+            if (sscanf(offcpy, "$%zu$", &n) != 1) {
                 cli_errmsg("cli_caloff: Invalid macro($) in offset: %s\n", offcpy);
                 return CL_EMALFDB;
             }
@@ -511,7 +513,7 @@ cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, cl
                     *offset_min = *offset_max = CLI_OFF_ANY;
                 break;
             default:
-                cli_errmsg("cli_caloff: Not a relative offset (type: %u)\n", offdata[0]);
+                cli_errmsg("cli_caloff: Not a relative offset (type: %zu)\n", offdata[0]);
                 return CL_EARG;
         }
 
@@ -524,7 +526,6 @@ cl_error_t cli_caloff(const char *offstr, const struct cli_target_info *info, cl
 
 void cli_targetinfo_init(struct cli_target_info *info)
 {
-
     if (NULL == info) {
         return;
     }
@@ -1020,7 +1021,9 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
     unsigned char digest[CLI_HASH_AVAIL_TYPES][CLI_HASHLEN_MAX];
 
     unsigned int i = 0, j = 0;
-    uint32_t maxpatlen, bytes, offset = 0;
+    uint16_t maxpatlen;
+    size_t bytes;
+    size_t offset = 0;
 
     struct cli_ac_data generic_ac_data;
     bool gdata_initialized = false;
@@ -1276,8 +1279,8 @@ cl_error_t cli_scan_fmap(cli_ctx *ctx, cli_file_t ftype, bool filetype_only, str
             /* if (bytes <= (maxpatlen * (offset!=0))), it means the last window finished the file hashing *
              *   since the last window is responsible for adding intersection between windows (maxpatlen)  */
             if (hdb && (bytes > (maxpatlen * (offset != 0)))) {
-                const void *data  = buff + maxpatlen * (offset != 0);
-                uint32_t data_len = bytes - maxpatlen * (offset != 0);
+                const void *data = buff + maxpatlen * (offset != 0);
+                size_t data_len  = bytes - maxpatlen * (offset != 0);
 
                 for (hash_type = CLI_HASH_MD5; hash_type < CLI_HASH_AVAIL_TYPES; hash_type++) {
                     /*
@@ -1421,17 +1424,32 @@ done:
             continue;                                                     \
     }
 
-cl_error_t cli_matchmeta(cli_ctx *ctx, const char *fname, size_t fsizec, size_t fsizer, int encrypted, unsigned int filepos, int res1)
+cl_error_t cli_matchmeta(cli_ctx *ctx, const char *fname, size_t fsizec, size_t fsizer, int encrypted, size_t filepos, int res1)
 {
     const struct cli_cdb *cdb;
     cl_error_t ret = CL_SUCCESS;
 
-    cli_dbgmsg("CDBNAME:%s:%llu:%s:%llu:%llu:%d:%u:%u\n",
-               cli_ftname(cli_recursion_stack_get_type(ctx, -1)), (long long unsigned)fsizec, fname, (long long unsigned)fsizec, (long long unsigned)fsizer,
+    cli_dbgmsg("CDBNAME:%s:%zu:%s:%zu:%zu:%d:%zu:%d\n",
+               cli_ftname(cli_recursion_stack_get_type(ctx, -1)), fsizec, fname, fsizec, fsizer,
                encrypted, filepos, res1);
 
-    if (ctx->engine && ctx->engine->cb_meta) {
-        if (ctx->engine->cb_meta(cli_ftname(cli_recursion_stack_get_type(ctx, -1)), fsizec, fname, fsizer, encrypted, filepos, ctx->cb_ctx) == CL_VIRUS) {
+    /* Run the more modern cb_meta_size_t callback */
+    if (ctx->engine && ctx->engine->cb_meta_size_t) {
+        if (ctx->engine->cb_meta_size_t(cli_ftname(cli_recursion_stack_get_type(ctx, -1)), fsizec, fname, fsizer, encrypted, filepos, ctx->cb_ctx) == CL_VIRUS) {
+            cli_dbgmsg("inner file blocked by callback: %s\n", fname);
+
+            ret = cli_append_virus(ctx, "Detected.By.Callback");
+            if (ret != CL_SUCCESS) {
+                return ret;
+            }
+        }
+    }
+
+    /* Run the deprecated version which uses unsigned long (may be only 32bit on some platforms) */
+    if (ctx->engine && ctx->engine->cb_meta &&
+        /* Check for 32-bit limits on 'fsizec', 'fsizer', and 'filepos' because 'unsigned long' may be 32bit on some 64bit platforms. */
+        ((SIZEOF_LONG == 8) || ((fsizec <= UINT32_MAX) && (fsizer <= UINT32_MAX) && (filepos <= UINT32_MAX)))) {
+        if (ctx->engine->cb_meta(cli_ftname(cli_recursion_stack_get_type(ctx, -1)), (unsigned long)fsizec, fname, (unsigned long)fsizer, encrypted, (unsigned long)filepos, ctx->cb_ctx) == CL_VIRUS) {
             cli_dbgmsg("inner file blocked by callback: %s\n", fname);
 
             ret = cli_append_virus(ctx, "Detected.By.Callback");

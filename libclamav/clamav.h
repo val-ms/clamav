@@ -2061,7 +2061,7 @@ extern const char *cl_retver(void);
 extern const char *cl_strerror(cl_error_t clerror);
 
 /* ----------------------------------------------------------------------------
- * Crypto/hashing functions
+ * Hashing functions.
  */
 #define MD5_HASH_SIZE 16
 #define SHA1_HASH_SIZE 20
@@ -2069,8 +2069,132 @@ extern const char *cl_strerror(cl_error_t clerror);
 #define SHA384_HASH_SIZE 48
 #define SHA512_HASH_SIZE 64
 
+#define CL_HASH_FLAG_NONE 0x00     /* None */
+#define CL_HASH_FLAG_ALLOCATE 0x01 /* Use CL_HASH_FLAG_ALLOCATE to dynamically allocate the output buffer.                 \
+                                    * If this flag is set, the function will allocate a buffer for the hash and return it. \
+                                    * The caller is responsible for freeing the buffer using free().                       \
+                                    * If this flag is not set, the caller must provide a buffer to store the hash. */
+#define CL_HASH_FLAG_NO_FIPS 0x02  /* Use CL_HASH_FLAG_NO_FIPS to bypass FIPS restrictions on which algorithms can be \
+                                    * used. This is useful if you want to use algorithms that are not FIPS-approved.     \
+                                    * For example, you might want to use this flag if you want to use "md5" or "sha1".   \
+                                    * You should only do this when the hash is used for non-cryptographic purposes.      \
+                                    * Note: If OpenSSL's FIPS provider is not available, this flag has no effect. */
+
 /**
  * @brief Generate a hash of data.
+ *
+ * @param alg               The hashing algorithm to use.
+ *                          Suggested "alg" names include "md5", "sha1", "sha2-256", "sha2-384", and "sha2-512".
+ *                          But the underlying hashing library is OpenSSL and you might be able to use
+ *                          other algorithms supported by OpenSSL's EVP_get_digestbyname() function.
+ *                          Note: For the `cl_scan*` functions (above) the supported algorithms are
+ *                                presently limited to "md5", "sha1", "sha2-256".
+ * @param data              The data to be hashed.
+ * @param data_len          The length of the to-be-hashed data.
+ * @param[inout] hash       A buffer to store the generated hash.
+ *                          Set flags to CL_HASH_FLAG_ALLOCATE to dynamically allocate buffer.
+ * @param[inout] hash_len   A pointer that stores how long the generated hash is.
+ * @param flags             Flags to modify the behavior of the hashing function.
+ *                          Use CL_HASH_FLAG_ALLOCATE to dynamically allocate the output buffer.
+ *                          Use CL_HASH_FLAG_NO_FIPS to bypass FIPS restrictions on which algorithms can be used.
+ *
+ * @return cl_error_t       CL_SUCCESS if the hash was generated successfully.
+ *                          CL_E* error code if an error occurred.
+ */
+extern cl_error_t cl_hash_data_ex(
+    const char *alg,
+    const uint8_t *data,
+    size_t data_len,
+    uint8_t **hash,
+    size_t *hash_len,
+    uint32_t flags);
+
+struct cl_hash_ctx;
+typedef struct cl_hash_ctx cl_hash_ctx_t;
+
+/**
+ * @brief Initialize a hash context.
+ *
+ * @param alg               The hash algorithm to use.
+ * @param flags             Flags to modify the behavior of the hashing function.
+ *                          Use CL_HASH_FLAG_NO_FIPS to bypass FIPS restrictions on which algorithms can be used.
+ * @return cl_error_t       CL_SUCCESS if the hash context was successfully initialized.
+ */
+extern cl_error_t cl_hash_init_ex(
+    const char *alg,
+    uint32_t flags,
+    cl_hash_ctx_t **ctx_out);
+
+/**
+ * @brief Update a hash context with new data.
+ *
+ * @param ctx               The hash context.
+ * @param data              The data to hash.
+ * @param length            The size of the data.
+ * @return cl_error_t       CL_SUCCESS if the data was successfully added to the hash context.
+ *                          CL_E* error code if an error occurred.
+ */
+extern cl_error_t cl_update_hash_ex(
+    cl_hash_ctx_t *ctx,
+    const uint8_t *data,
+    size_t length);
+
+/**
+ * @brief Finalize a hash context and get the resulting hash.
+ *
+ * @param ctx               The hash context.
+ * @param[inout] hash       A buffer to store the generated hash.
+ *                          Set flags to CL_HASH_FLAG_ALLOCATE to dynamically allocate buffer.
+ * @param[inout] hash_len   A pointer that stores how long the generated hash is.
+ * @param flags             Flags to modify the behavior of the hashing function.
+ *                          Use CL_HASH_FLAG_ALLOCATE to dynamically allocate the output buffer.
+ *
+ * @return cl_error_t       CL_SUCCESS if the hash was successfully finalized.
+ *                          CL_E* error code if an error occurred.
+ */
+extern cl_error_t cl_finish_hash_ex(
+    cl_hash_ctx_t *ctx,
+    uint8_t **hash,
+    size_t *hash_len,
+    uint32_t flags);
+
+/**
+ * @brief Destroy a hash context.
+ *
+ * @param ctx   The hash context.
+ */
+extern void cl_hash_destroy_ex(cl_hash_ctx_t *ctx);
+
+/**
+ * @brief Generate a hash of a file.
+ *
+ * @param alg               The hashing algorithm to use.
+ * @param fd                The file descriptor.
+ * @param offset            The offset in the file to start hashing from.
+ * @param length            The length of the data to hash. If 0, the entire file will be hashed.
+ * @param[inout] hash       A buffer to store the generated hash.
+ *                          Set flags to CL_HASH_FLAG_ALLOCATE to dynamically allocate buffer.
+ * @param[inout] hash_len   A pointer that stores how long the generated hash is.
+ * @param flags             Flags to modify the behavior of the hashing function.
+ *                          Use CL_HASH_FLAG_ALLOCATE to dynamically allocate the output buffer.
+ *                          Use CL_HASH_FLAG_NO_FIPS to bypass FIPS restrictions on which algorithms can be used.
+ *
+ * @return cl_error_t       CL_SUCCESS if the hash was generated successfully.
+ */
+extern cl_error_t cl_hash_file_fd_ex(
+    const char *alg,
+    int fd,
+    size_t offset,
+    size_t length,
+    uint8_t **hash,
+    size_t *hash_len,
+    uint32_t flags);
+
+/**
+ * @brief Generate a hash of data.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_data_ex()` instead.
  *
  * @param alg       The hashing algorithm to use.
  * @param buf       The data to be hashed.
@@ -2082,7 +2206,10 @@ extern const char *cl_strerror(cl_error_t clerror);
 extern unsigned char *cl_hash_data(const char *alg, const void *buf, size_t len, unsigned char *obuf, unsigned int *olen);
 
 /**
- * @brief Generate a hash of a file.
+ * @brief Generate a hash of a file given a file descriptor.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Note: there is no `cl_hash_file_fd_ctx_ex()` function. Use `cl_hash_file_fd_ex()` instead.
  *
  * @param ctx       A pointer to the OpenSSL EVP_MD_CTX object.
  * @param fd        The file descriptor.
@@ -2092,7 +2219,10 @@ extern unsigned char *cl_hash_data(const char *alg, const void *buf, size_t len,
 extern unsigned char *cl_hash_file_fd_ctx(EVP_MD_CTX *ctx, int fd, unsigned int *olen);
 
 /**
- * @brief Generate a hash of a file.
+ * @brief Generate a hash of a file given a file descriptor.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_file_fd_ex()` instead.
  *
  * @param fd        The file descriptor.
  * @param alg       The hashing algorithm to use.
@@ -2102,7 +2232,10 @@ extern unsigned char *cl_hash_file_fd_ctx(EVP_MD_CTX *ctx, int fd, unsigned int 
 extern unsigned char *cl_hash_file_fd(int fd, const char *alg, unsigned int *olen);
 
 /**
- * @brief Generate a hash of a file.
+ * @brief Generate a hash of a file given a FILE pointer.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Note: There is no `cl_hash_file_fp_ex()` function. Use `cl_hash_file_fd_ex()` instead.
  *
  * @param fp        A pointer to a FILE object.
  * @param alg       The hashing algorithm to use.
@@ -2113,6 +2246,9 @@ extern unsigned char *cl_hash_file_fp(FILE *fp, const char *alg, unsigned int *o
 
 /**
  * @brief Generate a sha2-256 hash of data.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_data_ex()` instead.
  *
  * @param buf       The data to hash.
  * @param len       The length of the to-be-hashed data.
@@ -2125,6 +2261,9 @@ extern unsigned char *cl_sha256(const void *buf, size_t len, unsigned char *obuf
 /**
  * @brief Generate a sha2-384 hash of data.
  *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_data_ex()` instead.
+ *
  * @param buf       The data to hash.
  * @param len       The length of the to-be-hashed data.
  * @param[out] obuf (optional) A pointer to store the generated hash. Use NULL to dynamically allocate buffer.
@@ -2135,6 +2274,9 @@ extern unsigned char *cl_sha384(const void *buf, size_t len, unsigned char *obuf
 
 /**
  * @brief Generate a sha2-512 hash of data.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_data_ex()` instead.
  *
  * @param buf       The data to hash.
  * @param len       The length of the to-be-hashed data.
@@ -2147,6 +2289,9 @@ extern unsigned char *cl_sha512(const void *buf, size_t len, unsigned char *obuf
 /**
  * @brief Generate a sha1 hash of data.
  *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_data_ex()` instead.
+ *
  * @param buf       The data to hash.
  * @param len       The length of the to-be-hashed data.
  * @param[out] obuf (optional) A pointer to store the generated hash. Use NULL to dynamically allocate buffer.
@@ -2154,6 +2299,56 @@ extern unsigned char *cl_sha512(const void *buf, size_t len, unsigned char *obuf
  * @return          A pointer to a malloc'd buffer that holds the generated hash.
  */
 extern unsigned char *cl_sha1(const void *buf, size_t len, unsigned char *obuf, unsigned int *olen);
+
+/**
+ * @brief Initialize a hash context.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_init_ex()` instead.
+ *
+ * @param alg       The hash algorithm to use.
+ * @return void*
+ */
+extern void *cl_hash_init(const char *alg);
+
+/**
+ * @brief Update a hash context with new data.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_update_hash_ex()` instead.
+ *
+ * @param ctx       The hash context.
+ * @param data      The data to hash.
+ * @param sz        The size of the data.
+ * @return int      0 on success, -1 on error.
+ */
+extern int cl_update_hash(void *ctx, const void *data, size_t sz);
+
+/**
+ * @brief Finalize a hash context and get the resulting hash.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_finish_hash_ex()` instead.
+ *
+ * @param ctx       The hash context.
+ * @param buf       A buffer to store the resulting hash. Must be large enough to hold the hash.
+ * @return int      0 on success, -1 on error.
+ */
+extern int cl_finish_hash(void *ctx, void *buf);
+
+/**
+ * @brief Destroy a hash context.
+ *
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `cl_hash_destroy_ex()` instead.
+ *
+ * @param ctx   The hash context.
+ */
+extern void cl_hash_destroy(void *ctx);
+
+/* -------------------------------------------------------------------------------
+ * Signing and verification functions.
+ */
 
 /**
  * @brief Verify validity of signed data.
@@ -2426,40 +2621,6 @@ extern unsigned char *cl_sign_file_fp(FILE *fp, EVP_PKEY *pkey, const char *alg,
  * @return          A pointer to the EVP_PKEY object that contains the private key in memory.
  */
 extern EVP_PKEY *cl_get_pkey_file(char *keypath);
-
-/**
- * @brief Initialize a hash context.
- *
- * @param alg       The hash algorithm to use.
- * @return void*
- */
-extern void *cl_hash_init(const char *alg);
-
-/**
- * @brief Update a hash context with new data.
- *
- * @param ctx       The hash context.
- * @param data      The data to hash.
- * @param sz        The size of the data.
- * @return int      0 on success, -1 on error.
- */
-extern int cl_update_hash(void *ctx, const void *data, size_t sz);
-
-/**
- * @brief Finalize a hash context and get the resulting hash.
- *
- * @param ctx       The hash context.
- * @param buf       A buffer to store the resulting hash. Must be large enough to hold the hash.
- * @return int      0 on success, -1 on error.
- */
-extern int cl_finish_hash(void *ctx, void *buf);
-
-/**
- * @brief Destroy a hash context.
- *
- * @param ctx   The hash context.
- */
-extern void cl_hash_destroy(void *ctx);
 
 #ifdef __cplusplus
 }

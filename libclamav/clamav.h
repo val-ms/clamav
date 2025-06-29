@@ -281,7 +281,7 @@ extern cl_error_t cl_init(unsigned int initoptions);
 /**
  * @brief Allocate a new scanning engine and initialize default settings.
  *
- * The engine should be freed with `cl_engine_free()`.
+ * The engine must be freed with `cl_engine_free()`.
  *
  * @return struct cl_engine* Pointer to the scanning engine.
  */
@@ -551,7 +551,7 @@ extern cl_fmap_t *cl_fmap_open_handle(
 extern cl_fmap_t *cl_fmap_open_memory(const void *start, size_t len);
 
 /**
- * @brief Set the name of a file map. E.g. "invoice.exe"
+ * @brief Set the utf8 name of a file map. E.g. "invoice.exe"
  *
  * The name is used for debugging and logging purposes.
  * In a future release, the file extension may help determine refine file type
@@ -567,7 +567,7 @@ extern cl_fmap_t *cl_fmap_open_memory(const void *start, size_t len);
 extern cl_error_t cl_fmap_set_name(cl_fmap_t *map, const char *name);
 
 /**
- * @brief Get the name of a file map.
+ * @brief Get the utf8 name of a file map.
  *
  * The name is used for debugging and logging purposes.
  *
@@ -578,7 +578,7 @@ extern cl_error_t cl_fmap_set_name(cl_fmap_t *map, const char *name);
 extern cl_error_t cl_fmap_get_name(cl_fmap_t *map, const char **name_out);
 
 /**
- * @brief Set the path of a file map. E.g. "/tmp/invoice.exe"
+ * @brief Set the utf8 path of a file map. E.g. "/tmp/invoice.exe"
  *
  * This is used to set the actual file path of the mapped map.
  * The path may be used for debugging or logging purposes.
@@ -592,7 +592,7 @@ extern cl_error_t cl_fmap_get_name(cl_fmap_t *map, const char **name_out);
 extern cl_error_t cl_fmap_set_path(cl_fmap_t *map, const char *path);
 
 /**
- * @brief Get the path of a file map.
+ * @brief Get the utf8 path of a file map.
  *
  * The path is used for debugging and logging purposes.
  *
@@ -616,7 +616,7 @@ extern cl_error_t cl_fmap_set_path(cl_fmap_t *map, const char *path);
  * @param[out] path_out   Pointer to a variable to receive the path of the file map.
  * @param[out] offset_out (optional) Pointer to a variable to receive the offset of the current layer within the given file.
  * @param[out] len_out    (optional) Pointer to a variable to receive the length of the current layer within the given file.
- * @return const char*    The path of the mapped file on disk (probably a temp file), or NULL if not set.
+ * @return cl_error_t     CL_SUCCESS if the path was successfully retrieved.
  *                        CL_EACCES if the map does not have a file descriptor.
  *                        CL_ENULLARG if null arguments were provided.
  */
@@ -640,8 +640,8 @@ extern cl_error_t cl_fmap_get_path(cl_fmap_t *map, const char **path_out, size_t
  * @param[out] offset_out (optional) Pointer to a variable to receive the offset of the current layer within the given file.
  * @param[out] len_out    (optional) Pointer to a variable to receive the length of the current layer within the given file.
  * @return cl_error_t     CL_SUCCESS if the file descriptor was successfully retrieved.
- *                        CL_SUCCESS if the file descriptor was successfully retrieved.EACCES if the map does not have a file descriptor.
- *                        CL_SUCCESS if the file descriptor was successfully retrieved.ENULLARG if null arguments were provided.
+ *                        CL_EACCES if the map does not have a file descriptor.
+ *                        CL_ENULLARG if null arguments were provided.
  */
 extern cl_error_t cl_fmap_get_fd(const cl_fmap_t *map, int *fd_out, size_t *offset_out, size_t *len_out);
 
@@ -708,7 +708,7 @@ extern cl_error_t cl_fmap_will_need_hash_later(const cl_fmap_t *map, const char 
  * If a hash of the requested type has NOT already been calculated then it will
  * be calculated when you call this function, and stored for future use.
  *
- * You're responsible for freeing the hash string when you're done with it.
+ * You are responsible for freeing the hash string when you're done with it.
  *
  * @param map           A file map.
  * @param hash_alg      The hash algorithm to use (e.g., "md5", "sha1", "sha2-256").
@@ -721,8 +721,8 @@ extern cl_error_t cl_fmap_get_hash(const cl_fmap_t *map, const char *hash_alg, c
  * @brief Get the file contents from a file map.
  *
  * This function will get you a pointer to the contents of the file represented
- * by the file map. This is read-only and is not malloced.\
- * If you want a copy to keep, you should copy it yourself.
+ * by the file map. This is read-only and is not malloced.
+ * If you want a copy to keep, you must copy it yourself.
  *
  * Use the offset and length parameters to specify the range of the file you
  * want to retrieve. If you don't need the whole file, don't ask for the whole file.
@@ -745,7 +745,7 @@ extern cl_error_t cl_fmap_get_data(
 /**
  * @brief Releases resources associated with the map.
  *
- * You should release any resources you hold only after (handles, maps) calling
+ * You must release any resources you hold only after (handles, maps) calling
  * this function.
  *
  * @param map           Map to be closed.
@@ -772,8 +772,14 @@ extern cl_error_t cl_scan_layer_get_fmap(
 /**
  * @brief Get the parent layer of a scan layer.
  *
+ * You may use this in a loop/recursively to walk the scan layers.
+ * Also consider using `cl_scan_layer_get_recursion_level()` to determine the
+ * depth of the current layer.
+ *
  * @param layer                 The scan layer to query.
  * @param[out] parent_layer_out Pointer to a variable to receive the parent layer.
+ *                              Will be NULL if the layer has no parent.
+ *                              For example, the root layer has no parent.
  * @return cl_error_t           CL_SUCCESS if successful.
  */
 extern cl_error_t cl_scan_layer_get_parent_layer(
@@ -789,6 +795,7 @@ extern cl_error_t cl_scan_layer_get_parent_layer(
  *
  * @param layer                 The scan layer to query.
  * @param[out] type_out         Pointer to a variable to receive the file type.
+ *                              This is a static reference and must not be freed.
  * @return cl_error_t           CL_SUCCESS if successful.
  */
 extern cl_error_t cl_scan_layer_get_type(
@@ -896,7 +903,8 @@ typedef enum scan_callback {
     /** Alert
      *
      * Occurs each time an alert (detection) would be triggered during a scan.
-     * This may happen more than once per scan!
+     * In all-match mode, you may receive multiple alerts for the same file, and even the same layer, corresponding with
+     * each signature that matched.
      */
     CL_SCAN_CALLBACK_ALERT,
 
@@ -943,9 +951,10 @@ typedef enum scan_callback {
  *
  * @return CL_VIRUS
  *
- *         This means you don't trust the file. A new alert will be added.
+ *         This will mark the file as infected. A new alert will be added.
  *
  *         For CL_SCAN_CALLBACK_ALERT: Means you agree with the alert (no extra alert needed).
+ *                                     Remember that CL_SUCCESS means you want to ignore the alert.
  *
  * @return CL_VERIFIED
  *

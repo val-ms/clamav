@@ -87,6 +87,7 @@ pub extern "C" fn evidence_new() -> sys::evidence_t {
 pub unsafe extern "C" fn _evidence_new_from_child(
     child: sys::evidence_t,
     evidence_out: *mut sys::evidence_t,
+    from_normalized: bool,
     err: *mut *mut FFIError,
 ) -> bool {
     if child.is_null() {
@@ -101,7 +102,7 @@ pub unsafe extern "C" fn _evidence_new_from_child(
     // The caller must remain responsible for freeing the child evidence.
     let child = ManuallyDrop::new(Box::from_raw(child as *mut Evidence));
 
-    match Evidence::from_child(&child) {
+    match Evidence::from_child(&child, from_normalized) {
         Ok(evidence) => {
             // Write the new evidence to the output pointer
             *evidence_out = Box::into_raw(Box::new(evidence)) as sys::evidence_t;
@@ -123,6 +124,7 @@ pub unsafe extern "C" fn _evidence_new_from_child(
 pub unsafe extern "C" fn _evidence_add_child_evidence(
     evidence: sys::evidence_t,
     child: sys::evidence_t,
+    from_normalized: bool,
     err: *mut *mut FFIError,
 ) -> bool {
     if evidence.is_null() {
@@ -140,7 +142,7 @@ pub unsafe extern "C" fn _evidence_add_child_evidence(
     // The caller must remain responsible for freeing the child evidence.
     let child = ManuallyDrop::new(Box::from_raw(child as *mut Evidence));
 
-    let add_result = evidence.add_child_evidence(&child);
+    let add_result = evidence.add_child_evidence(&child, from_normalized);
     match add_result {
         Ok(_) => true,
         Err(error) => ffi_error!(err = err, error),
@@ -421,7 +423,7 @@ impl Evidence {
     }
 
     /// Create a new Evidence instance for a parent layer, given Evidence from a child layer.
-    pub fn from_child(child: &Evidence) -> Result<Self, Error> {
+    pub fn from_child(child: &Evidence, from_normalized: bool) -> Result<Self, Error> {
         if child.strong.is_empty() && child.pua.is_empty() && child.weak.is_empty() {
             return Err(Error::InvalidParameter(
                 "Child evidence must contain at least one indicator".to_string(),
@@ -432,27 +434,33 @@ impl Evidence {
         let mut parent = Evidence::default();
 
         // Copy indicators from child to parent, increasing depth by 1
-        parent.add_child_evidence(child)?;
+        parent.add_child_evidence(child, from_normalized)?;
 
         Ok(parent)
     }
 
     /// Add evidence from a child layer to this evidence instance.
-    pub fn add_child_evidence(&mut self, child: &Evidence) -> Result<(), Error> {
+    pub fn add_child_evidence(&mut self, child: &Evidence, from_normalized: bool) -> Result<(), Error> {
         if child.strong.is_empty() && child.pua.is_empty() && child.weak.is_empty() {
             return Err(Error::InvalidParameter(
                 "Child evidence must contain at least one indicator".to_string(),
             ));
         }
 
-        // Copy indicators from child to parent, increasing depth by 1
+        let depth_increment = if from_normalized {
+            0 // If from_normalized is true, we do not increase the depth.
+        } else {
+            1 // Otherwise, we increase the depth by 1.
+        };
+
+        // Copy indicators from child to parent, increasing depth by 1 (unless from_normalized is true).
         for (name, metas) in &child.strong {
             for meta in metas {
                 self.add_indicator(
                     name,
                     meta.static_virname,
                     IndicatorType::Strong,
-                    meta.depth + 1,
+                    meta.depth + depth_increment,
                     meta.object_id,
                 )?;
             }
@@ -464,7 +472,7 @@ impl Evidence {
                     name,
                     meta.static_virname,
                     IndicatorType::PotentiallyUnwanted,
-                    meta.depth + 1,
+                    meta.depth + depth_increment,
                     meta.object_id,
                 )?;
             }
@@ -475,7 +483,7 @@ impl Evidence {
                     name,
                     meta.static_virname,
                     IndicatorType::Weak,
-                    meta.depth + 1,
+                    meta.depth + depth_increment,
                     meta.object_id,
                 )?;
             }

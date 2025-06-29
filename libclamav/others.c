@@ -2030,6 +2030,7 @@ cl_fmap_t *cli_recursion_stack_pop(cli_ctx *ctx)
                     ctx->recursion_stack[ctx->recursion_level].evidence,
                     // new parent evidence
                     &parent_evidence,
+                    ctx->recursion_stack[ctx->recursion_level].attributes & LAYER_ATTRIBUTES_NORMALIZED,
                     &new_evidence_error)) {
                 cli_errmsg("Failed create evidence for parent layer given child's evidence: %s\n",
                            ffierror_fmt(new_evidence_error));
@@ -2047,6 +2048,7 @@ cl_fmap_t *cli_recursion_stack_pop(cli_ctx *ctx)
                     ctx->recursion_stack[ctx->recursion_level - 1].evidence,
                     // child
                     ctx->recursion_stack[ctx->recursion_level].evidence,
+                    ctx->recursion_stack[ctx->recursion_level].attributes & LAYER_ATTRIBUTES_NORMALIZED,
                     &add_evidence_error)) {
                 cli_errmsg("Failed add child's evidence to parent's evidence: %s\n",
                            ffierror_fmt(add_evidence_error));

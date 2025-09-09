@@ -997,7 +997,7 @@ static cl_error_t cli_scanarj(cli_ctx *ctx)
     do {
         metadata.filename = NULL;
 
-        ret = cli_unarj_prepare_file(dir, &metadata);
+        ret = cli_unarj_prepare_file(&metadata);
         if (ret != CL_SUCCESS) {
             cli_dbgmsg("ARJ: cli_unarj_prepare_file Error: %s\n", cl_strerror(ret));
             break;
@@ -3720,16 +3720,12 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
     cli_file_t found_type;
 
     if ((typercg) &&
+        // Omit embedded files already found via this process
+        ((ctx->recursion_stack[ctx->recursion_level].attributes & LAYER_ATTRIBUTES_EMBEDDED)) &&
         // We should also omit bzips, but DMG's may be detected in bzips. (type != CL_TYPE_BZ) &&        /* Omit BZ files because they can contain portions of original files like zip file entries that cause invalid extractions and lots of warnings. Decompress first, then scan! */
         (type != CL_TYPE_GZ) &&         /* Omit GZ files because they can contain portions of original files like zip file entries that cause invalid extractions and lots of warnings. Decompress first, then scan! */
         (type != CL_TYPE_CPIO_OLD) &&   /* Omit CPIO_OLD files because it's an image format that we can extract and scan manually. */
         (type != CL_TYPE_ZIP) &&        /* Omit ZIP files because it'll detect each zip file entry as SFXZIP, which is a waste. We'll extract it and then scan. */
-        (type != CL_TYPE_ZIPSFX) &&     /* Omit SFX archive types from being checked for embedded content. They should only be parsed for contained files. Those contained files could be EXE's with more SFX, but that's the nature of containers. */
-        (type != CL_TYPE_ARJSFX) &&     /* " */
-        (type != CL_TYPE_RARSFX) &&     /* " */
-        (type != CL_TYPE_EGGSFX) &&     /* " */
-        (type != CL_TYPE_CABSFX) &&     /* " */
-        (type != CL_TYPE_7ZSFX) &&      /* " */
         (type != CL_TYPE_OOXML_WORD) && /* Omit OOXML because they are ZIP-based and file-type scanning will double-extract their contents. */
         (type != CL_TYPE_OOXML_PPT) &&  /* " */
         (type != CL_TYPE_OOXML_XL) &&   /* " */
@@ -4036,6 +4032,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
                     switch (fpt->type) {
                         case CL_TYPE_RARSFX:
                             if (type != CL_TYPE_RAR) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
@@ -4049,6 +4046,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_EGGSFX:
                             if (type != CL_TYPE_EGG) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
@@ -4062,10 +4060,19 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_ZIPSFX:
                             if (type != CL_TYPE_ZIP) {
+                                // Header validity check to prevent false positives from being scanned.
+                                size_t zip_size = 0;
+
+                                ret = cli_unzip_single_header_check(ctx, fpt->offset, &zip_size);
+                                if (ret != CL_SUCCESS) {
+                                    cli_dbgmsg("ZIP single header check failed: %s (%d)\n", cl_strerror(ret), ret);
+                                    break;
+                                }
+
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
-                                    ctx->fmap->len - fpt->offset,
+                                    zip_size,
                                     ctx,
                                     CL_TYPE_ZIP,
                                     NULL,
@@ -4075,6 +4082,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_CABSFX:
                             if (type != CL_TYPE_MSCAB) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
@@ -4088,10 +4096,19 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_ARJSFX:
                             if (type != CL_TYPE_ARJ) {
+                                // Header validity check to prevent false positives from being scanned.
+                                size_t arj_size = 0;
+
+                                ret = cli_unarj_header_check(ctx, fpt->offset, &arj_size);
+                                if (ret != CL_SUCCESS) {
+                                    cli_dbgmsg("ARJ header check failed: %s (%d)\n", cl_strerror(ret), ret);
+                                    break;
+                                }
+
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
-                                    ctx->fmap->len - fpt->offset,
+                                    arj_size,
                                     ctx,
                                     CL_TYPE_ARJ,
                                     NULL,
@@ -4101,6 +4118,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_7ZSFX:
                             if (type != CL_TYPE_7Z) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
@@ -4113,8 +4131,9 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
                             break;
 
                         case CL_TYPE_NULSFT:
+                            // Note: CL_TYPE_NULSFT is special, because the file actually starts 4 bytes before the start of the signature match
                             if (type == CL_TYPE_MSEXE && fpt->offset > 4) {
-                                // Note: CL_TYPE_NULSFT is special, because the file actually starts 4 bytes before the start of the signature match
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset - 4,
@@ -4128,6 +4147,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_AUTOIT:
                             if (type == CL_TYPE_MSEXE) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
@@ -4141,6 +4161,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_ISHIELD_MSI:
                             if (type == CL_TYPE_MSEXE) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
@@ -4154,6 +4175,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_PDF:
                             if (type != CL_TYPE_PDF) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
                                 nret = cli_magic_scan_nested_fmap_type(
                                     ctx->fmap,
                                     fpt->offset,
@@ -4167,6 +4189,7 @@ static cl_error_t scanraw(cli_ctx *ctx, cli_file_t type, uint8_t typercg, cli_fi
 
                         case CL_TYPE_MSEXE:
                             if (type == CL_TYPE_MSEXE || type == CL_TYPE_ZIP || type == CL_TYPE_MSOLE2) {
+                                // TODO: Add header validity check to prevent false positives from being scanned.
 
                                 cli_dbgmsg("*** Detected embedded PE file at %u ***\n", (unsigned int)fpt->offset);
 

@@ -429,7 +429,7 @@ problem-1 : 32-bit ARM architecture:
 problem-2 : 32-bit kernels and arm64 kernels:
   32-bit linux kernels provide fixup for these "paired" instruction "Alignment fault exception".
   So unaligned paired-access instructions work via exception handler in kernel in 32-bit linux.
- 
+
   But some arm64 kernels do not handle these faults in 32-bit programs.
   So we have unhandled exception for such instructions.
   Probably some new arm64 kernels have fixed it, and unaligned

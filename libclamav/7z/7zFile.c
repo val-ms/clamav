@@ -53,16 +53,16 @@ void File_Construct(CSzFile *p)
 static WRes File_Open(CSzFile *p, const char *name, int writeMode)
 {
   #ifdef USE_WINDOWS_FILE
-  
+
   p->handle = CreateFileA(name,
       writeMode ? GENERIC_WRITE : GENERIC_READ,
       FILE_SHARE_READ, NULL,
       writeMode ? CREATE_ALWAYS : OPEN_EXISTING,
       FILE_ATTRIBUTE_NORMAL, NULL);
   return (p->handle != INVALID_HANDLE_VALUE) ? 0 : GetLastError();
-  
+
   #elif defined(USE_FOPEN)
-  
+
   p->file = fopen(name, writeMode ? "wb+" : "rb");
   return (p->file != 0) ? 0 :
     #ifdef UNDER_CE
@@ -70,7 +70,7 @@ static WRes File_Open(CSzFile *p, const char *name, int writeMode)
     #else
     errno;
     #endif
-  
+
   #else
 
   int flags = (writeMode ? (O_CREAT | O_EXCL | O_WRONLY) : O_RDONLY);
@@ -115,14 +115,14 @@ WRes OutFile_OpenW(CSzFile *p, const WCHAR *name) { return File_OpenW(p, name, 1
 WRes File_Close(CSzFile *p)
 {
   #ifdef USE_WINDOWS_FILE
-  
+
   if (p->handle != INVALID_HANDLE_VALUE)
   {
     if (!CloseHandle(p->handle))
       return GetLastError();
     p->handle = INVALID_HANDLE_VALUE;
   }
-  
+
   #elif defined(USE_FOPEN)
 
   if (p->file != NULL)
@@ -224,7 +224,7 @@ WRes File_Write(CSzFile *p, const void *data, size_t *size)
   *size = 0;
   if (originalSize == 0)
     return 0;
-  
+
   #ifdef USE_WINDOWS_FILE
 
   do
@@ -306,7 +306,7 @@ WRes File_Seek(CSzFile *p, Int64 *pos, ESzSeek origin)
   return 0;
 
   #else
-  
+
   int moveMethod; // = origin;
 
   switch ((int)origin)
@@ -316,7 +316,7 @@ WRes File_Seek(CSzFile *p, Int64 *pos, ESzSeek origin)
     case SZ_SEEK_END: moveMethod = SEEK_END; break;
     default: return EINVAL;
   }
-  
+
   #if defined(USE_FOPEN)
   {
     int res = fseek(p->file, (long)*pos, moveMethod);
@@ -335,54 +335,9 @@ WRes File_Seek(CSzFile *p, Int64 *pos, ESzSeek origin)
     *pos = res;
     return 0;
   }
-  
+
   #endif // USE_FOPEN
   #endif // USE_WINDOWS_FILE
-}
-
-
-WRes File_GetLength(CSzFile *p, UInt64 *length)
-{
-  #ifdef USE_WINDOWS_FILE
-  
-  DWORD sizeHigh;
-  DWORD sizeLow = GetFileSize(p->handle, &sizeHigh);
-  if (sizeLow == 0xFFFFFFFF)
-  {
-    DWORD res = GetLastError();
-    if (res != NO_ERROR)
-      return res;
-  }
-  *length = (((UInt64)sizeHigh) << 32) + sizeLow;
-  return 0;
-  
-  #elif defined(USE_FOPEN)
-  
-  long pos = ftell(p->file);
-  int res = fseek(p->file, 0, SEEK_END);
-  *length = ftell(p->file);
-  fseek(p->file, pos, SEEK_SET);
-  return res;
-
-  #else
-
-  off_t pos;
-  *length = 0;
-  pos = lseek(p->fd, 0, SEEK_CUR);
-  if (pos != -1)
-  {
-    const off_t len2 = lseek(p->fd, 0, SEEK_END);
-    const off_t res2 = lseek(p->fd, pos, SEEK_SET);
-    if (len2 != -1)
-    {
-      *length = (UInt64)len2;
-      if (res2 != -1)
-        return 0;
-    }
-  }
-  return errno;
-  
-  #endif
 }
 
 

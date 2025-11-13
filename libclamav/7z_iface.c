@@ -45,13 +45,13 @@ static SRes FileInStream_fmap_Read(void *pp, void *buf, size_t *size)
     if (*size == 0)
         return 0;
 
-    read_sz = fmap_readn(p->file.fmap, buf, p->s.curpos, *size);
+    read_sz = fmap_readn(p->file.fmap, buf, p->vt.curpos, *size);
     if (read_sz == (size_t)-1) {
         *size = 0;
         return SZ_ERROR_READ;
     }
 
-    p->s.curpos += read_sz;
+    p->vt.curpos += read_sz;
 
     *size = read_sz;
     return SZ_OK;
@@ -63,15 +63,15 @@ static SRes FileInStream_fmap_Seek(void *pp, Int64 *pos, ESzSeek origin)
 
     switch (origin) {
         case SZ_SEEK_SET:
-            p->s.curpos = *pos;
+            p->vt.curpos = *pos;
             break;
         case SZ_SEEK_CUR:
-            p->s.curpos += *pos;
-            *pos = p->s.curpos;
+            p->vt.curpos += *pos;
+            *pos = p->vt.curpos;
             break;
         case SZ_SEEK_END:
-            p->s.curpos = p->file.fmap->len + *pos;
-            *pos        = p->s.curpos;
+            p->vt.curpos = p->file.fmap->len + *pos;
+            *pos         = p->vt.curpos;
             break;
         default:
             return 1;
@@ -83,7 +83,7 @@ static SRes FileInStream_fmap_Seek(void *pp, Int64 *pos, ESzSeek origin)
 int cli_7unz(cli_ctx *ctx, size_t offset)
 {
     CFileInStream archiveStream;
-    CLookToRead lookStream;
+    CLookToRead2 lookStream;
     CSzArEx db;
     SRes res;
     UInt16 utf16buf[UTFBUFSZ], *utf16name = utf16buf;
@@ -93,21 +93,21 @@ int cli_7unz(cli_ctx *ctx, size_t offset)
 
     /* Replacement for
        FileInStream_CreateVTable(&archiveStream); */
-    archiveStream.s.Read    = FileInStream_fmap_Read;
-    archiveStream.s.Seek    = FileInStream_fmap_Seek;
-    archiveStream.s.curpos  = 0;
+    archiveStream.vt.Read   = FileInStream_fmap_Read;
+    archiveStream.vt.Seek   = FileInStream_fmap_Seek;
+    archiveStream.vt.curpos = 0;
     archiveStream.file.fmap = ctx->fmap;
 
-    LookToRead_CreateVTable(&lookStream, False);
+    LookToRead2_CreateVTable(&lookStream, False);
 
-    if (archiveStream.s.Seek(&archiveStream.s, &begin_of_archive, SZ_SEEK_SET) != 0)
+    if (archiveStream.vt.Seek(&archiveStream.vt, &begin_of_archive, SZ_SEEK_SET) != 0)
         return CL_CLEAN;
 
-    lookStream.realStream = &archiveStream.s;
-    LookToRead_Init(&lookStream);
+    lookStream.realStream = &archiveStream.vt;
+    LookToRead2_INIT(&lookStream);
 
     SzArEx_Init(&db);
-    res = SzArEx_Open(&db, &lookStream.s, &allocImp, &allocTempImp);
+    res = SzArEx_Open(&db, &lookStream.vt, &allocImp, &allocTempImp);
     if (res == SZ_ERROR_ENCRYPTED && SCAN_HEURISTIC_ENCRYPTED_ARCHIVE) {
         cli_dbgmsg("cli_7unz: Encrypted header found in archive.\n");
         found = cli_append_potentially_unwanted(ctx, "Heuristics.Encrypted.7Zip");
@@ -117,10 +117,9 @@ int cli_7unz(cli_ctx *ctx, size_t offset)
         size_t outBufferSize   = 0;
         unsigned int encrypted = 0;
 
-        for (i = 0; i < db.db.NumFiles; i++) {
+        for (i = 0; i < db.NumFiles; i++) {
             size_t offset           = 0;
             size_t outSizeProcessed = 0;
-            const CSzFileItem *f    = db.db.Files + i;
             char *name;
             char *tmp_name;
             size_t j;
@@ -130,11 +129,11 @@ int cli_7unz(cli_ctx *ctx, size_t offset)
             if ((found = cli_checklimits("7unz", ctx, 0, 0, 0)))
                 break;
 
-            if (f->IsDir)
+            if (SzArEx_IsDir(&db, i))
                 continue;
 
             // skip this file if we would exceed max file size or max scan size. (we already checked for the max files and max scan time)
-            if (cli_checklimits("7unz", ctx, f->Size, 0, 0))
+            if (cli_checklimits("7unz", ctx, SzArEx_GetFileSize(&db, i), 0, 0))
                 continue;
 
             if (!db.FileNameOffsets)
@@ -160,7 +159,7 @@ int cli_7unz(cli_ctx *ctx, size_t offset)
             name[j] = 0;
             cli_dbgmsg("cli_7unz: extracting %s\n", name);
 
-            res = SzArEx_Extract(&db, &lookStream.s, i, &blockIndex, &outBuffer, &outBufferSize, &offset, &outSizeProcessed, &allocImp, &allocTempImp);
+            res = SzArEx_Extract(&db, &lookStream.vt, i, &blockIndex, &outBuffer, &outBufferSize, &offset, &outSizeProcessed, &allocImp, &allocTempImp);
             if (res == SZ_ERROR_ENCRYPTED) {
                 encrypted = 1;
                 if (SCAN_HEURISTIC_ENCRYPTED_ARCHIVE) {
@@ -171,7 +170,14 @@ int cli_7unz(cli_ctx *ctx, size_t offset)
                     }
                 }
             }
-            if (CL_VIRUS == cli_matchmeta(ctx, name, 0, f->Size, encrypted, i, f->CrcDefined ? f->Crc : 0)) {
+            if (CL_VIRUS == cli_matchmeta(ctx,
+                                          name,
+                                          0,
+                                          SzArEx_GetFileSize(&db, i),
+                                          encrypted,
+                                          i,
+                                          SzBitWithVals_Check(&db.CRCs, i) ? db.CRCs.Vals[i]
+                                                                           : 0)) {
                 found = CL_VIRUS;
                 break;
             }

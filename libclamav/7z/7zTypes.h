@@ -24,6 +24,8 @@
 
 EXTERN_C_BEGIN
 
+#include "fmap.h"
+
 #define SZ_OK 0
 
 #define SZ_ERROR_DATA 1
@@ -41,6 +43,9 @@ EXTERN_C_BEGIN
 
 #define SZ_ERROR_ARCHIVE 16
 #define SZ_ERROR_NO_ARCHIVE 17
+
+/* ACAB */
+#define SZ_ERROR_ENCRYPTED 18
 
 typedef int SRes;
 
@@ -373,6 +378,7 @@ Z7_C_IFACE_DECL (ISeekInStream)
 {
   SRes (*Read)(ISeekInStreamPtr p, void *buf, size_t *size);  /* same as ISeqInStream::Read */
   SRes (*Seek)(ISeekInStreamPtr p, Int64 *pos, ESzSeek origin);
+  off_t curpos;
 };
 #define ISeekInStream_Read(p, buf, size)   (p)->Read(p, buf, size)
 #define ISeekInStream_Seek(p, pos, origin) (p)->Seek(p, pos, origin)
@@ -409,10 +415,10 @@ typedef struct
 {
   ILookInStream vt;
   ISeekInStreamPtr realStream;
- 
+
   size_t pos;
   size_t size; /* it's data size */
-  
+
   /* the following variables must be set outside */
   Byte *buf;
   size_t bufSize;

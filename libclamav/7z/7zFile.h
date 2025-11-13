@@ -33,6 +33,7 @@ typedef struct
   #else
   int fd;
   #endif
+  fmap_t *fmap;
 } CSzFile;
 
 void File_Construct(CSzFile *p);
@@ -53,7 +54,6 @@ WRes File_Read(CSzFile *p, void *data, size_t *size);
 WRes File_Write(CSzFile *p, const void *data, size_t *size);
 
 WRes File_Seek(CSzFile *p, Int64 *pos, ESzSeek origin);
-WRes File_GetLength(CSzFile *p, UInt64 *length);
 
 
 /* ---------- FileInStream ---------- */

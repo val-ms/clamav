@@ -54,7 +54,7 @@
 
 
 MY_ALIGN(64)
-static UInt64 g_Crc64Table[256 * Z7_CRC64_NUM_TABLES_USE];
+UInt64 g_Crc64Table[256 * Z7_CRC64_NUM_TABLES_USE];
 
 
 UInt64 Z7_FASTCALL Crc64Update(UInt64 v, const void *data, size_t size)

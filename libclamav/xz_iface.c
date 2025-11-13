@@ -27,10 +27,10 @@
 #include "7z/XzCrc64.h"
 #include "xz_iface.h"
 
-void *__xz_wrap_alloc(void *unused, size_t size);
-void __xz_wrap_free(void *unused, void *freeme);
+void *__xz_wrap_alloc(const ISzAlloc *unused, size_t size);
+void __xz_wrap_free(const ISzAlloc *unused, void *freeme);
 
-void *__xz_wrap_alloc(void *unused, size_t size)
+void *__xz_wrap_alloc(const ISzAlloc *unused, size_t size)
 {
     UNUSEDPARAM(unused);
 
@@ -40,7 +40,7 @@ void *__xz_wrap_alloc(void *unused, size_t size)
 
     return cli_max_malloc(size);
 }
-void __xz_wrap_free(void *unused, void *freeme)
+void __xz_wrap_free(const ISzAlloc *unused, void *freeme)
 {
     UNUSEDPARAM(unused);
     free(freeme);
@@ -50,10 +50,11 @@ static ISzAlloc g_Alloc = {__xz_wrap_alloc, __xz_wrap_free};
 
 int cli_XzInit(struct CLI_XZ *XZ)
 {
-    if (SZ_OK != XzUnpacker_Create(&XZ->state, &g_Alloc))
-        return XZ_RESULT_DATA_ERROR;
+    XzUnpacker_Construct(&XZ->state, &g_Alloc);
+
     if (g_Crc64Table[1] == 0)
         Crc64GenerateTable();
+
     return XZ_RESULT_OK;
 }
 
@@ -68,12 +69,17 @@ int cli_XzDecode(struct CLI_XZ *XZ)
 {
     SRes res;
     SizeT outbytes, inbytes;
+    int srcFinished = 0;
 
     inbytes  = XZ->avail_in;
     outbytes = XZ->avail_out;
 
+    if (inbytes == 0) {
+        srcFinished = 1;
+    }
+
     res = XzUnpacker_Code(&XZ->state, XZ->next_out, &outbytes,
-                          XZ->next_in, &inbytes, CODER_FINISH_ANY, &XZ->status);
+                          XZ->next_in, &inbytes, srcFinished, CODER_FINISH_ANY, &XZ->status);
 
     XZ->avail_in -= inbytes;
     XZ->next_in += inbytes;

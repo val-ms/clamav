@@ -673,12 +673,12 @@ static void *acceptloop_th(void *arg)
 enum scanopts {
     /* Scan options. */
     OPTSCAN_ALLMATCH,
+    OPTSCAN_MULTISCAN,
 
     /* Scan commands. */
-    OPTSCAN_CONTSCAN,
-    OPTSCAN_FILDES,
-    OPTSCAN_INSTREAM,
-    OPTSCAN_MULTISCAN,
+    OPTSCAN_FILE_PATH,
+    OPTSCAN_FILE_DESCRIPTOR,
+    OPTSCAN_FILE_STREAM,
 
     /* Error case. */
     OPTSCAN_UNKNOWN,
@@ -692,13 +692,14 @@ static struct {
 } scanopt_options[] = {
     /* The following are scan options to modify a scan. */
     {"ALLMATCH", sizeof("ALLMATCH") - 1, OPTSCAN_ALLMATCH, false},
+    {"MULTISCAN", sizeof("MULTISCAN") - 1, OPTSCAN_MULTISCAN, false},
 
     /* The following are traditional clamd scan commands.
        A single scan command should always follow any scan options in a OPTSCAN request. */
-    {"CONTSCAN", sizeof("CONTSCAN") - 1, OPTSCAN_CONTSCAN, false},
-    {"FILDES", sizeof("FILDES") - 1, OPTSCAN_FILDES, false},
-    {"INSTREAM", sizeof("INSTREAM") - 1, OPTSCAN_INSTREAM, false},
-    {"MULTISCAN", sizeof("MULTISCAN") - 1, OPTSCAN_MULTISCAN, false}};
+    {"FILE_PATH", sizeof("FILE_PATH") - 1, OPTSCAN_FILE_PATH, false},
+    {"FILE_DESCRIPTOR", sizeof("FILE_DESCRIPTOR") - 1, OPTSCAN_FILE_DESCRIPTOR, false},
+    {"FILE_STREAM", sizeof("FILE_STREAM") - 1, OPTSCAN_FILE_STREAM, false}
+};
 
 /**
  * @brief Identify the option type and separate out the rest of the message for further processing.
@@ -853,24 +854,24 @@ static const char *parse_dispatch_cmd(client_conn_t *conn, struct fd_buf *buf, s
                     conn->options->general |= CL_SCAN_GENERAL_ALLMATCHES;
                     break;
                 }
-                case OPTSCAN_CONTSCAN: {
-                    logg(LOGG_DEBUG, "Received CONTSCAN scan option.\n");
-                    cmdtype = COMMAND_CONTSCAN;
-                    break;
-                }
-                case OPTSCAN_FILDES: {
-                    logg(LOGG_DEBUG, "Received FILEDES scan option.\n");
-                    cmdtype = COMMAND_FILDES;
-                    break;
-                }
-                case OPTSCAN_INSTREAM: {
-                    logg(LOGG_DEBUG, "Received INSTREAM scan option.\n");
-                    cmdtype = COMMAND_INSTREAM;
-                    break;
-                }
                 case OPTSCAN_MULTISCAN: {
                     logg(LOGG_DEBUG, "Received MULTISCAN scan option.\n");
                     cmdtype = COMMAND_MULTISCAN;
+                    break;
+                }
+                case OPTSCAN_FILE_PATH: {
+                    logg(LOGG_DEBUG, "Received FILE_PATH scan option.\n");
+                    cmdtype = COMMAND_CONTSCAN;
+                    break;
+                }
+                case OPTSCAN_FILE_DESCRIPTOR: {
+                    logg(LOGG_DEBUG, "Received FILE_DESCRIPTOR scan option.\n");
+                    cmdtype = COMMAND_FILDES;
+                    break;
+                }
+                case OPTSCAN_FILE_STREAM: {
+                    logg(LOGG_DEBUG, "Received FILE_STREAM scan option.\n");
+                    cmdtype = COMMAND_INSTREAM;
                     break;
                 }
                 case OPTSCAN_UNKNOWN: {

@@ -2312,10 +2312,13 @@ static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, str
             if (!(thunk32.u.Ordinal & PE_IMAGEDIR_ORDINAL_FLAG32)) {
                 offset = cli_rawaddr(thunk32.u.Function, peinfo->sections, peinfo->nsections, &err, fsize, peinfo->hdr_size);
 
-                if (!ret) {
+                if (!err && offset <= fsize && fsize - offset > sizeof(uint16_t)) {
                     /* Hint field is a uint16_t and precedes the Name field */
-                    if ((buffer = fmap_need_off_once(map, offset + sizeof(uint16_t), MIN(PE_MAXNAMESIZE, fsize - offset))) != NULL) {
-                        funcname = CLI_STRNDUP(buffer, MIN(PE_MAXNAMESIZE, fsize - offset));
+                    const size_t name_offset = (size_t)offset + sizeof(uint16_t);
+                    const size_t name_size   = MIN(PE_MAXNAMESIZE, fsize - name_offset);
+
+                    if ((buffer = fmap_need_off_once(map, name_offset, name_size)) != NULL) {
+                        funcname = CLI_STRNDUP(buffer, name_size);
                         if (funcname == NULL) {
                             cli_dbgmsg("scan_pe: cannot duplicate function name\n");
                             return CL_EMEM;
@@ -2353,10 +2356,13 @@ static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, str
             if (!(thunk64.u.Ordinal & PE_IMAGEDIR_ORDINAL_FLAG64)) {
                 offset = cli_rawaddr(thunk64.u.Function, peinfo->sections, peinfo->nsections, &err, fsize, peinfo->hdr_size);
 
-                if (!err) {
+                if (!err && offset <= fsize && fsize - offset > sizeof(uint16_t)) {
                     /* Hint field is a uint16_t and precedes the Name field */
-                    if ((buffer = fmap_need_off_once(map, offset + sizeof(uint16_t), MIN(PE_MAXNAMESIZE, fsize - offset))) != NULL) {
-                        funcname = CLI_STRNDUP(buffer, MIN(PE_MAXNAMESIZE, fsize - offset));
+                    const size_t name_offset = (size_t)offset + sizeof(uint16_t);
+                    const size_t name_size   = MIN(PE_MAXNAMESIZE, fsize - name_offset);
+
+                    if ((buffer = fmap_need_off_once(map, name_offset, name_size)) != NULL) {
+                        funcname = CLI_STRNDUP(buffer, name_size);
                         if (funcname == NULL) {
                             cli_dbgmsg("scan_pe: cannot duplicate function name\n");
                             return CL_EMEM;

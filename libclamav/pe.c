@@ -2204,7 +2204,9 @@ static int validate_impname(const char *name, uint32_t length, int dll)
             (*c >= 'a' && *c <= 'z') ||
             (*c >= 'A' && *c <= 'Z') ||
             (*c == '_') ||
-            (dll && *c == '.')) {
+            (*c == '.') ||
+            (dll && *c == '+') ||
+            (dll && *c == '-')) {
 
             c++;
             i++;
@@ -2213,6 +2215,56 @@ static int validate_impname(const char *name, uint32_t length, int dll)
     }
 
     return 1;
+}
+
+/**
+ * Read a PE import name, preserving the legacy local cap.
+ *
+ * PE import strings are NUL-terminated, but not limited by PE_MAXNAMESIZE. If a
+ * name exceeds the local cap, keep the old capped-prefix behavior instead of
+ * scanning farther for a terminator. Only reject as unterminated when all
+ * available bytes fit within the cap and no NUL was found.
+ */
+static cl_error_t read_pe_impname(fmap_t *map, size_t offset, size_t fsize, const char *name_kind, const char **buffer, size_t *name_len)
+{
+    size_t available;
+    size_t name_size;
+    const char *name;
+    size_t len;
+
+    if (offset > fsize) {
+        cli_dbgmsg("scan_pe: invalid offset for imported %s name\n", name_kind);
+        return CL_EFORMAT;
+    }
+
+    available = fsize - offset;
+    name_size = MIN(PE_MAXNAMESIZE, available);
+    if (name_size == 0) {
+        cli_dbgmsg("scan_pe: empty name for imported %s\n", name_kind);
+        return CL_EFORMAT;
+    }
+
+    name = fmap_need_off_once(map, offset, name_size);
+    if (name == NULL) {
+        cli_dbgmsg("scan_pe: failed to read name for imported %s\n", name_kind);
+        return CL_EREAD;
+    }
+
+    len = CLI_STRNLEN(name, name_size);
+    if (len == 0) {
+        cli_dbgmsg("scan_pe: empty name for imported %s\n", name_kind);
+        return CL_EFORMAT;
+    }
+
+    if (len == name_size && available <= PE_MAXNAMESIZE) {
+        cli_dbgmsg("scan_pe: unterminated name for imported %s\n", name_kind);
+        return CL_EFORMAT;
+    }
+
+    *buffer   = name;
+    *name_len = len;
+
+    return CL_SUCCESS;
 }
 
 static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, struct pe_image_import_descriptor *image, const char *dllname, struct cli_exe_info *peinfo, int *first)
@@ -2262,7 +2314,13 @@ static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, str
             }                                                                       \
                                                                                     \
             funclen = strlen(funcname);                                             \
-            if (validate_impname(funcname, funclen, 1) == 0) {                      \
+            if (funclen == 0) {                                                     \
+                cli_dbgmsg("scan_pe: empty name for imported function\n");          \
+                ret = CL_EFORMAT;                                                   \
+                break;                                                              \
+            }                                                                       \
+                                                                                    \
+            if (validate_impname(funcname, funclen, 0) == 0) {                      \
                 cli_dbgmsg("scan_pe: invalid name for imported function\n");        \
                 ret = CL_EFORMAT;                                                   \
                 break;                                                              \
@@ -2315,14 +2373,17 @@ static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, str
                 if (!err && offset <= fsize && fsize - offset > sizeof(uint16_t)) {
                     /* Hint field is a uint16_t and precedes the Name field */
                     const size_t name_offset = (size_t)offset + sizeof(uint16_t);
-                    const size_t name_size   = MIN(PE_MAXNAMESIZE, fsize - name_offset);
+                    size_t name_len;
 
-                    if ((buffer = fmap_need_off_once(map, name_offset, name_size)) != NULL) {
-                        funcname = CLI_STRNDUP(buffer, name_size);
-                        if (funcname == NULL) {
-                            cli_dbgmsg("scan_pe: cannot duplicate function name\n");
-                            return CL_EMEM;
-                        }
+                    ret = read_pe_impname(map, name_offset, fsize, "function", &buffer, &name_len);
+                    if (ret != CL_SUCCESS) {
+                        return ret;
+                    }
+
+                    funcname = CLI_STRNDUP(buffer, name_len);
+                    if (funcname == NULL) {
+                        cli_dbgmsg("scan_pe: cannot duplicate function name\n");
+                        return CL_EMEM;
                     }
                 }
             } else {
@@ -2359,14 +2420,17 @@ static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, str
                 if (!err && offset <= fsize && fsize - offset > sizeof(uint16_t)) {
                     /* Hint field is a uint16_t and precedes the Name field */
                     const size_t name_offset = (size_t)offset + sizeof(uint16_t);
-                    const size_t name_size   = MIN(PE_MAXNAMESIZE, fsize - name_offset);
+                    size_t name_len;
 
-                    if ((buffer = fmap_need_off_once(map, name_offset, name_size)) != NULL) {
-                        funcname = CLI_STRNDUP(buffer, name_size);
-                        if (funcname == NULL) {
-                            cli_dbgmsg("scan_pe: cannot duplicate function name\n");
-                            return CL_EMEM;
-                        }
+                    ret = read_pe_impname(map, name_offset, fsize, "function", &buffer, &name_len);
+                    if (ret != CL_SUCCESS) {
+                        return ret;
+                    }
+
+                    funcname = CLI_STRNDUP(buffer, name_len);
+                    if (funcname == NULL) {
+                        cli_dbgmsg("scan_pe: cannot duplicate function name\n");
+                        return CL_EMEM;
                     }
                 }
             } else {
@@ -2447,6 +2511,7 @@ static cl_error_t hash_imptbl(cli_ctx *ctx, uint8_t **digest, uint32_t *impsz, b
 
     while (left > sizeof(struct pe_image_import_descriptor) && nimps < PE_MAXIMPORTS) {
         char *dllname = NULL;
+        size_t dllname_len = 0;
 
         // Temporary variable so we don't have overlapping writes with the EC32 reads.
         uint32_t temp;
@@ -2489,20 +2554,19 @@ static cl_error_t hash_imptbl(cli_ctx *ctx, uint8_t **digest, uint32_t *impsz, b
             goto done;
         }
 
-        buffer = fmap_need_off_once(map, offset, MIN(PE_MAXNAMESIZE, fsize - offset));
-        if (buffer == NULL) {
-            cli_dbgmsg("scan_pe: failed to read name for dll\n");
-            status = CL_EREAD;
+        ret = read_pe_impname(map, offset, fsize, "dll", &buffer, &dllname_len);
+        if (ret != CL_SUCCESS) {
+            status = ret;
             goto done;
         }
 
-        if (validate_impname(dllname, MIN(PE_MAXNAMESIZE, fsize - offset), 1) == 0) {
+        if (validate_impname(buffer, dllname_len, 1) == 0) {
             cli_dbgmsg("scan_pe: invalid name for imported dll\n");
             status = CL_EFORMAT;
             goto done;
         }
 
-        dllname = CLI_STRNDUP(buffer, MIN(PE_MAXNAMESIZE, fsize - offset));
+        dllname = CLI_STRNDUP(buffer, dllname_len);
         if (dllname == NULL) {
             cli_dbgmsg("scan_pe: cannot duplicate dll name\n");
             status = CL_EMEM;

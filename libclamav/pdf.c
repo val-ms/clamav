@@ -2838,8 +2838,10 @@ static int pdf_readint(const char *q0, int len, const char *key)
         value = -1;
     } else if (CL_SUCCESS != cli_strntol_wrap(q, (size_t)len, 0, 10, &value)) {
         value = -1;
+    } else if (value < INT_MIN || value > INT_MAX) {
+        value = -1;
     }
-    return value;
+    return (int)value;
 }
 
 static int pdf_readbool(const char *q0, int len, const char *key, int Default)

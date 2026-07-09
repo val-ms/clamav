@@ -2389,12 +2389,16 @@ void pdf_parseobj(struct pdf_struct *pdf, struct pdf_obj *obj)
 
         dict_length -= q2 - q;
         q = q2;
+        if (dict_length <= 1)
+            break;
         /* normalize PDF names */
-        for (i = 0; dict_length > 0 && (i < sizeof(pdfname) - 1); i++) {
+        for (i = 0; dict_length > 1 && (i < sizeof(pdfname) - 1); i++) {
             q++;
             dict_length--;
 
             if (*q == '#') {
+                if (dict_length < 3)
+                    break;
                 if (cli_hex2str_to(q + 1, pdfname + i, 2) == -1)
                     break;
 

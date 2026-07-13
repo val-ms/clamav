@@ -36,9 +36,11 @@
 #define X_OK R_OK
 
 int w32_stat(const char *path, struct stat *buf);
+int w32_stat64(const char *path, struct _stati64 *buf);
 
 #define lstat stat
 #define stat(path, buf) w32_stat(path, buf)
+#define CLAMAV_USE_INTERNAL_WIN32_STAT64 1
 
 int w32_access(const char *pathname, int mode);
 

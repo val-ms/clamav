@@ -38,7 +38,19 @@
 #define STAT64_OK 0
 #endif
 
-#if defined(HAVE_STAT64) && STAT64_OK
+#if defined(_WIN32)
+
+#define STATBUF struct _stati64
+#if defined(CLAMAV_USE_INTERNAL_WIN32_STAT64)
+#define CLAMSTAT w32_stat64
+#define LSTAT w32_stat64
+#else
+#define CLAMSTAT _stati64
+#define LSTAT _stati64
+#endif
+#define FSTAT _fstati64
+
+#elif defined(HAVE_STAT64) && STAT64_OK
 
 #include <unistd.h>
 

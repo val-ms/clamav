@@ -177,35 +177,63 @@ static time_t FileTimeToUnixTime(FILETIME t)
     return (time_t)(ll / 10000000);
 }
 
-int w32_stat(const char *path, struct stat *buf)
+#define W32_FILL_STATBUF(buf, attrs)                                                                     \
+    do {                                                                                                 \
+        (buf)->st_dev   = 1;                                                                             \
+        (buf)->st_rdev  = 1;                                                                             \
+        (buf)->st_uid   = 0;                                                                             \
+        (buf)->st_gid   = 0;                                                                             \
+        (buf)->st_ino   = 1;                                                                             \
+        (buf)->st_atime = FileTimeToUnixTime((attrs).ftLastAccessTime);                                  \
+        (buf)->st_ctime = FileTimeToUnixTime((attrs).ftCreationTime);                                    \
+        (buf)->st_mtime = FileTimeToUnixTime((attrs).ftLastWriteTime);                                   \
+        (buf)->st_mode  = ((attrs).dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? S_IRUSR : S_IRWXU;      \
+        (buf)->st_mode |= ((attrs).dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? _S_IFDIR : _S_IFREG;   \
+        (buf)->st_nlink = 1;                                                                             \
+        (buf)->st_size  = ((uint64_t)(attrs).nFileSizeHigh << (sizeof((attrs).nFileSizeLow) * 8)) |      \
+                         (attrs).nFileSizeLow;                                                          \
+    } while (0)
+
+static int w32_get_file_attributes(const char *path, WIN32_FILE_ATTRIBUTE_DATA *attrs)
 {
     int len;
     wchar_t *wpath = uncpath(path);
-    WIN32_FILE_ATTRIBUTE_DATA attrs;
 
     if (!wpath) {
         errno = ENOMEM;
         return -1;
     }
 
-    len = GetFileAttributesExW(wpath, GetFileExInfoStandard, &attrs);
+    len = GetFileAttributesExW(wpath, GetFileExInfoStandard, attrs);
     free(wpath);
     if (!len) {
         errno = ENOENT;
         return -1;
     }
-    buf->st_dev   = 1;
-    buf->st_rdev  = 1;
-    buf->st_uid   = 0;
-    buf->st_gid   = 0;
-    buf->st_ino   = 1;
-    buf->st_atime = FileTimeToUnixTime(attrs.ftLastAccessTime);
-    buf->st_ctime = FileTimeToUnixTime(attrs.ftCreationTime);
-    buf->st_mtime = FileTimeToUnixTime(attrs.ftLastWriteTime);
-    buf->st_mode  = (attrs.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? S_IRUSR : S_IRWXU;
-    buf->st_mode |= (attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? _S_IFDIR : _S_IFREG;
-    buf->st_nlink = 1;
-    buf->st_size  = ((uint64_t)attrs.nFileSizeHigh << (sizeof(attrs.nFileSizeLow) * 8)) | attrs.nFileSizeLow;
+    return 0;
+}
+
+int w32_stat(const char *path, struct stat *buf)
+{
+    WIN32_FILE_ATTRIBUTE_DATA attrs;
+
+    if (-1 == w32_get_file_attributes(path, &attrs)) {
+        return -1;
+    }
+
+    W32_FILL_STATBUF(buf, attrs);
+    return 0;
+}
+
+int w32_stat64(const char *path, struct _stati64 *buf)
+{
+    WIN32_FILE_ATTRIBUTE_DATA attrs;
+
+    if (-1 == w32_get_file_attributes(path, &attrs)) {
+        return -1;
+    }
+
+    W32_FILL_STATBUF(buf, attrs);
     return 0;
 }
 

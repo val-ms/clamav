@@ -5,9 +5,11 @@
 #include <stdio.h>
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <string.h>
+#include <errno.h>
 #include <check.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -22,6 +24,9 @@
 #include <libxml/parser.h>
 
 #include "platform.h"
+#ifdef _WIN32
+#include <winioctl.h>
+#endif
 
 // libclamav
 #include "clamav.h"
@@ -537,6 +542,51 @@ START_TEST(test_cl_strerror)
 {
 }
 END_TEST
+
+#ifdef _WIN32
+START_TEST(test_win32_statbuf_large_file)
+{
+    const int64_t large_size  = INT64_C(3) * 1024 * 1024 * 1024;
+    char *file_path           = NULL;
+    int fd                    = -1;
+    int chsize_ret            = 0;
+    HANDLE file_handle        = INVALID_HANDLE_VALUE;
+    DWORD bytes_returned      = 0;
+    STATBUF statbuf;
+
+    file_path = cli_newfilepath(tmpdir, "large-stat-file");
+    ck_assert_msg(NULL != file_path, "Failed to allocate large file path");
+
+    fd = safe_open(file_path, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, 0600);
+    ck_assert_msg(-1 != fd, "safe_open(%s) failed: %s", file_path, strerror(errno));
+
+    file_handle = (HANDLE)_get_osfhandle(fd);
+    ck_assert_msg(INVALID_HANDLE_VALUE != file_handle, "_get_osfhandle(%s) failed", file_path);
+    ck_assert_msg(DeviceIoControl(file_handle, FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &bytes_returned, NULL),
+                  "FSCTL_SET_SPARSE(%s) failed: %lu", file_path, GetLastError());
+
+    chsize_ret = _chsize_s(fd, large_size);
+    ck_assert_msg(0 == chsize_ret, "_chsize_s(%s, %llu) failed: %s",
+                  file_path, (unsigned long long)large_size, strerror(chsize_ret));
+
+    ck_assert_msg(0 == FSTAT(fd, &statbuf), "FSTAT(%s) failed: %s", file_path, strerror(errno));
+    ck_assert_msg((int64_t)statbuf.st_size == large_size,
+                  "FSTAT reported %llu bytes for %s, expected %llu",
+                  (unsigned long long)statbuf.st_size, file_path, (unsigned long long)large_size);
+
+    ck_assert_msg(0 == CLAMSTAT(file_path, &statbuf), "CLAMSTAT(%s) failed: %s", file_path, strerror(errno));
+    ck_assert_msg((int64_t)statbuf.st_size == large_size,
+                  "CLAMSTAT reported %llu bytes for %s, expected %llu",
+                  (unsigned long long)statbuf.st_size, file_path, (unsigned long long)large_size);
+
+    close(fd);
+    fd = -1;
+
+    ck_assert_msg(0 == unlink(file_path), "unlink(%s) failed: %s", file_path, strerror(errno));
+    free(file_path);
+}
+END_TEST
+#endif
 
 #ifndef _WIN32
 START_TEST(test_action_setup_quarantine_lock_uses_validated_directory_handle)
@@ -1480,6 +1530,9 @@ static Suite *test_cl_suite(void)
     tcase_add_test(tc_cl, test_cl_statchkdir);
     tcase_add_test(tc_cl, test_cl_settempdir);
     tcase_add_test(tc_cl, test_cl_strerror);
+#ifdef _WIN32
+    tcase_add_test(tc_cl, test_win32_statbuf_large_file);
+#endif
 #ifndef _WIN32
     tcase_add_test(tc_cl, test_action_setup_quarantine_lock_uses_validated_directory_handle);
     tcase_add_test(tc_cl, test_action_source_open_relative_path_stores_absolute_action_path);

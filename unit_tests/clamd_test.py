@@ -675,7 +675,7 @@ class TC(testcase.TestCase):
         self.log.info('verifying log output from virusaction-test.sh: {}'.format(str(TC.path_tmp / 'test-clamd.log')))
         self.verify_log(str(TC.path_tmp / 'test-clamd.log'),
             expected=['Virus found: ClamAV-Test-File.UNOFFICIAL'],
-            unexpected=['VirusEvent incorrect', 'VirusName incorrect'])
+            unexpected=['VirusEvent incorrect', 'VirusName incorrect', 'VirusName argument incorrect'])
 
     def test_clamd_09_clamdscan_ExcludePath(self):
         '''

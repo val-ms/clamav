@@ -121,6 +121,7 @@ class TC(testcase.TestCase):
     def test_formula_record_boundaries(self):
         self.step_name('Test XLM FORMULA records at the BIFF8 size boundary')
 
+        valid_string = b'XLM_VALID_FORMULA'
         testfiles = [
             TC.path_tmp / 'formula-8228.xls',
             TC.path_tmp / 'formula-8227.xls',
@@ -132,7 +133,9 @@ class TC(testcase.TestCase):
             TC.path_tmp / 'formula-8228-truncated-extended-function.xls',
             TC.path_tmp / 'formula-22-overdeclared-token-length.xls',
             TC.path_tmp / 'formula-8228-non-macro.xls',
+            TC.path_tmp / 'formula-valid-ptgstr.xls',
         ]
+        valid_token = b'\x17' + bytes([len(valid_string)]) + b'\x00' + valid_string
         _write_xlm_formula_workbook(testfiles[0], 8228)
         _write_xlm_formula_workbook(testfiles[1], 8227)
         _write_xlm_formula_workbook(testfiles[2], 100)
@@ -143,6 +146,7 @@ class TC(testcase.TestCase):
         _write_xlm_formula_workbook(testfiles[7], 8228, token_tail=b'\x22\x00\x6d\x80')
         _write_xlm_formula_workbook(testfiles[8], 22, declared_token_length=1)
         _write_xlm_formula_workbook(testfiles[9], 8228, macro_sheet=False)
+        _write_xlm_formula_workbook(testfiles[-1], 22 + len(valid_token), token_tail=valid_token)
 
         command = '{valgrind} {valgrind_args} {clamscan} -d {path_db} --debug {testfiles}'.format(
             valgrind=TC.valgrind,
@@ -160,10 +164,42 @@ class TC(testcase.TestCase):
         )
         assert output.err.count('[cli_extract_xlm_macros_and_images] Extracting macros to') == len(testfiles) - 1
 
-        scanmap_command = '{} {}'.format(
+        scanmap_command = '{} {} clean {}'.format(
             TC.check_xlm_scanmap,
+            TC.path_build / 'unit_tests' / 'input' / 'clamav.hdb',
             ' '.join(str(path) for path in testfiles),
         )
         scanmap_output = self.execute_command(scanmap_command)
 
         assert scanmap_output.ec == 0
+
+        signature = TC.path_tmp / 'xlm-formula.ndb'
+        signature.write_text(
+            'XLM.Formula.ptgStr:0:*:{}\n'.format(
+                (b' ptgStr' + valid_string).hex(),
+            )
+        )
+
+        detection_command = '{valgrind} {valgrind_args} {clamscan} -d {signature} {testfile}'.format(
+            valgrind=TC.valgrind,
+            valgrind_args=TC.valgrind_args,
+            clamscan=TC.clamscan,
+            signature=signature,
+            testfile=testfiles[-1],
+        )
+        detection_output = self.execute_command(detection_command)
+
+        assert detection_output.ec == 1
+        self.verify_output(
+            detection_output.out,
+            expected=['{}: XLM.Formula.ptgStr.UNOFFICIAL FOUND'.format(testfiles[-1].name)],
+        )
+
+        scanmap_detection_command = '{} {} virus {}'.format(
+            TC.check_xlm_scanmap,
+            signature,
+            testfiles[-1],
+        )
+        scanmap_detection_output = self.execute_command(scanmap_detection_command)
+
+        assert scanmap_detection_output.ec == 0

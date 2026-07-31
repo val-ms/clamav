@@ -61,17 +61,26 @@ done:
 int main(int argc, char **argv)
 {
     cl_error_t status;
-    struct cl_engine *engine = NULL;
+    struct cl_engine *engine     = NULL;
+    unsigned int signature_count = 0;
+    cl_error_t expected_status;
     int i;
 
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s FILE...\n", argv[0]);
+    if (argc < 4 || (0 != strcmp(argv[2], "clean") && 0 != strcmp(argv[2], "virus"))) {
+        fprintf(stderr, "Usage: %s DATABASE {clean|virus} FILE...\n", argv[0]);
         return 2;
     }
+    expected_status = 0 == strcmp(argv[2], "virus") ? CL_VIRUS : CL_SUCCESS;
 
     status = cl_init(CL_INIT_DEFAULT);
     if (CL_SUCCESS != status || NULL == (engine = cl_engine_new())) {
         fprintf(stderr, "Failed to initialize ClamAV: %s\n", cl_strerror(status));
+        return 2;
+    }
+    status = cl_load(argv[1], engine, &signature_count, CL_DB_STDOPT);
+    if (CL_SUCCESS != status) {
+        fprintf(stderr, "Failed to load signature database %s: %s\n", argv[1], cl_strerror(status));
+        cl_engine_free(engine);
         return 2;
     }
     status = cl_engine_compile(engine);
@@ -81,10 +90,11 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    for (i = 1; i < argc; i++) {
+    for (i = 3; i < argc; i++) {
         status = scan_file_as_map(argv[i], engine);
-        if (CL_SUCCESS != status) {
-            fprintf(stderr, "Scan-map failed for %s: %s\n", argv[i], cl_strerror(status));
+        if (expected_status != status) {
+            fprintf(stderr, "Scan-map returned %s for %s; expected %s\n",
+                    cl_strerror(status), argv[i], cl_strerror(expected_status));
             cl_engine_free(engine);
             return 1;
         }

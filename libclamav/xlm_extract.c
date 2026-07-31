@@ -4983,6 +4983,12 @@ cl_error_t cli_extract_xlm_macros_and_images(const char *dir, cli_ctx *ctx, char
     }
 
     /* Scan the extracted content */
+    if (0 != fflush(out_file)) {
+        cli_dbgmsg("cli_extract_xlm_macros_and_images: Failed to flush extracted XLM macro content\n");
+        status = CL_EWRITE;
+        goto done;
+    }
+
     if (lseek(out_fd, 0, SEEK_SET) != 0) {
         cli_dbgmsg("cli_extract_xlm_macros_and_images: Failed to seek to beginning of temporary file\n");
         status = CL_ESEEK;

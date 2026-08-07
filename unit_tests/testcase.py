@@ -53,6 +53,7 @@ class TestCase(unittest.TestCase):
     check_clamav = None
     check_clamd = None
     check_fpu_endian = None
+    check_xlm_scanmap = None
     milter = None
     clambc = None
     clamd = None
@@ -106,6 +107,11 @@ class TestCase(unittest.TestCase):
         cls.check_clamav =     Path(os.getenv("CHECK_CLAMAV"))     if os.getenv("CHECK_CLAMAV") != None else None
         cls.check_clamd =      Path(os.getenv("CHECK_CLAMD"))      if os.getenv("CHECK_CLAMD") != None else None
         cls.check_fpu_endian = Path(os.getenv("CHECK_FPU_ENDIAN")) if os.getenv("CHECK_FPU_ENDIAN") != None else None
+        cls.check_xlm_scanmap = (
+            Path(os.getenv("CHECK_XLM_SCANMAP"))
+            if os.getenv("CHECK_XLM_SCANMAP") != None
+            else None
+        )
         cls.milter =           Path(os.getenv("CLAMAV_MILTER"))    if os.getenv("CLAMAV_MILTER") != None else None
         cls.clambc =           Path(os.getenv("CLAMBC"))           if os.getenv("CLAMBC") != None else None
         cls.clamd =            Path(os.getenv("CLAMD"))            if os.getenv("CLAMD") != None else None

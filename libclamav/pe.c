@@ -2191,7 +2191,7 @@ static char *pe_ordinal(const char *dll, uint16_t ord)
     return cli_safer_strdup(name);
 }
 
-static int validate_impname(const char *name, uint32_t length, int dll)
+static int validate_impname(const char *name, uint32_t length, bool dll)
 {
     uint32_t i    = 0;
     const char *c = name;
@@ -2200,13 +2200,14 @@ static int validate_impname(const char *name, uint32_t length, int dll)
         return 1;
 
     while (i < length && *c != '\0') {
-        if ((*c >= '0' && *c <= '9') ||
-            (*c >= 'a' && *c <= 'z') ||
-            (*c >= 'A' && *c <= 'Z') ||
-            (*c == '_') ||
-            (*c == '.') ||
-            (dll && *c == '+') ||
-            (dll && *c == '-')) {
+        unsigned char ch = (unsigned char)*c;
+
+        if ((dll && ch >= ' ' && ch <= '~') ||
+            (!dll && ((ch >= '0' && ch <= '9') ||
+                      (ch >= 'a' && ch <= 'z') ||
+                      (ch >= 'A' && ch <= 'Z') ||
+                      ch == '_' ||
+                      ch == '.'))) {
 
             c++;
             i++;
@@ -2320,7 +2321,7 @@ static inline int hash_impfns(cli_ctx *ctx, void **hashctx, uint32_t *impsz, str
                 break;                                                              \
             }                                                                       \
                                                                                     \
-            if (validate_impname(funcname, funclen, 0) == 0) {                      \
+            if (validate_impname(funcname, funclen, false) == 0) {                  \
                 cli_dbgmsg("scan_pe: invalid name for imported function\n");        \
                 ret = CL_EFORMAT;                                                   \
                 break;                                                              \
@@ -2560,7 +2561,7 @@ static cl_error_t hash_imptbl(cli_ctx *ctx, uint8_t **digest, uint32_t *impsz, b
             goto done;
         }
 
-        if (validate_impname(buffer, dllname_len, 1) == 0) {
+        if (validate_impname(buffer, dllname_len, true) == 0) {
             cli_dbgmsg("scan_pe: invalid name for imported dll\n");
             status = CL_EFORMAT;
             goto done;
